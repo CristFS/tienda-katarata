@@ -46,19 +46,19 @@
         <input type="hidden" id="personal-codigo-original">
         <div class="form-group">
           <label>Código</label>
-          <input type="text" id="personal-codigo" readonly style="background:#f0f0f0">
+          <input type="text" id="personal-codigo" readonly style="background:#f0f0f0;width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
         </div>
         <div class="form-group">
           <label>Nombres y Apellidos</label>
-          <input type="text" id="personal-nombres" required>
+          <input type="text" id="personal-nombres" required style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
         </div>
         <div class="form-group">
           <label>DNI</label>
-          <input type="text" id="personal-dni" required>
+          <input type="text" id="personal-dni" required style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
         </div>
         <div class="form-group">
           <label>Área de Trabajo</label>
-          <input type="text" id="personal-area" required>
+          <input type="text" id="personal-area" required style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
         </div>
         <div style="display:flex; gap:10px; margin-top:20px">
           <button type="submit" class="btn btn-primary">Guardar</button>
@@ -68,8 +68,63 @@
     </div>
   </div>
 
-  <!-- Modal Producto (ya está en app.js renderProductos, pero se incluye aquí para referencia) -->
-  <!-- El modal de producto se genera dinámicamente en renderProductos() -->
+  <!-- Modal Producto -->
+  <div id="modal-producto" class="modal">
+    <div class="modal-content">
+      <h3 id="modal-titulo-producto">Nuevo Producto</h3>
+      <form id="form-producto" onsubmit="guardarProducto(event)">
+        <input type="hidden" id="producto-sku">
+        <div class="form-group">
+          <label>Nombre</label>
+          <input type="text" id="producto-nombre" required style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
+        </div>
+        <div class="form-group">
+          <label>Categoría</label>
+          <select id="producto-categoria" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
+            <option value="Bebida">Bebida</option>
+            <option value="Snack">Snack/Galleta</option>
+            <option value="Panadería">Panadería/Dulce</option>
+            <option value="Chocolate">Chocolate/Caramelo</option>
+            <option value="Otro">Otro</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Stock</label>
+          <input type="number" id="producto-stock" value="0" min="0" required style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
+        </div>
+        <div class="form-group">
+          <label>Precio de Compra (S/)</label>
+          <input type="number" id="producto-precio-compra" step="0.10" value="0" min="0" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
+        </div>
+        <div class="form-group">
+          <label>Precio de Venta (S/)</label>
+          <input type="number" id="producto-precio-venta" step="0.10" value="0" min="0" style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px">
+          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="button" class="btn" onclick="closeModal('producto')">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Pago -->
+  <div id="modal-pago" class="modal">
+    <div class="modal-content">
+      <h3>Registrar Pago</h3>
+      <form id="form-pago" onsubmit="guardarPago(event)">
+        <input type="hidden" id="pago-personal-codigo">
+        <div class="form-group">
+          <label>Monto a Pagar (S/)</label>
+          <input type="number" name="monto" step="0.10" required style="width:100%;padding:10px;border:1px solid #ddd;border-radius:5px">
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px">
+          <button type="submit" class="btn btn-success">Registrar</button>
+          <button type="button" class="btn" onclick="closeModal('pago')">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

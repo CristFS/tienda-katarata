@@ -366,3 +366,218 @@ ipcMain.handle('export-excel', async (event, data, filename) => {
     return 'ERROR: ' + err.toString();
   }
 });
+
+// Cierre de campaña - exportar y resetear
+ipcMain.handle('cerrar-campana', async (event, data) => {
+  const fs = require('fs');
+  const path = require('path');
+  const XLSX = require('xlsx');
+  
+  try {
+    const exportPath = 'C:\\Users\\usuario\\OneDrive\\Imágenes\\PROYECTO DE MEJORA KATARATA\\app-tienda\\Documentos exportados';
+    const historialPath = path.join(exportPath, 'historial_campanas');
+    
+    // Crear carpetas si no existen
+    if (!fs.existsSync(exportPath)) fs.mkdirSync(exportPath, { recursive: true });
+    if (!fs.existsSync(historialPath)) fs.mkdirSync(historialPath, { recursive: true });
+    
+    // Generar nombre de archivo con timestamp
+    const now = new Date();
+    const timestamp = now.toISOString().replace(/[:.]/g, '-').split('T')[0] + '_' + 
+                      String(now.getHours()).padStart(2, '0') + '-' + 
+                      String(now.getMinutes()).padStart(2, '0') + '-' + 
+                      String(now.getSeconds()).padStart(2, '0');
+    
+    // === 1. Generar JSON ===
+    // Calcular totales
+    const totalVentas = data.ventas.reduce((sum, v) => sum + (v.total || 0), 0);
+    const totalPagos = data.pagos.reduce((sum, p) => sum + (p.monto || 0), 0);
+    const totalDeuda = totalVentas - totalPagos;
+    const totalComida = data.consumosComida.reduce((sum, c) => {
+      if (c.dias) {
+        return sum + c.dias.filter(d => d.desayuno || d.almuerzo || d.cena).length;
+      }
+      return sum;
+    }, 0);
+    const costoComida = totalComida * data.precioComida;
+    
+    const jsonData = {
+      fechaCierre: now.toISOString().split('T')[0],
+      horaCierre: timestamp.split('_')[1],
+      resumen: {
+        totalPersonal: data.personal.length,
+        totalVentas: totalVentas,
+        totalPagos: totalPagos,
+        totalDeuda: totalDeuda,
+        totalComidas: totalComida,
+        costoComidaTotal: costoComida
+      },
+      personal: data.personal,
+      ventas: data.ventas,
+      pagos: data.pagos,
+      consumosComida: data.consumosComida,
+      productos: data.productos
+    };
+    
+    const jsonPath = path.join(historialPath, `campana_${timestamp}.json`);
+    fs.writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2), 'utf8');
+    console.log('JSON guardado:', jsonPath);
+    
+    // === 2. Generar Excel ===
+    const wb = XLSX.utils.book_new();
+    
+    // Hoja 1: Resumen general
+    const resumenGeneral = [{
+      'FECHA CIERRE': now.toISOString().split('T')[0],
+      'TOTAL PERSONAL': data.personal.length,
+      'TOTAL VENTAS': totalVentas,
+      'TOTAL PAGOS': totalPagos,
+      'DEUDA PENDIENTE': totalDeuda,
+      'TOTAL COMIDAS': totalComida,
+      'COSTO COMIDA': costoComida
+    }];
+    const wsResumen = XLSX.utils.json_to_sheet(resumenGeneral);
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+    
+    // Hoja 2: Resumen por colaborador
+    const resumenCols = data.personal.map(p => {
+      const misVentas = data.ventas.filter(v => v.clienteCodigo === p.codigo);
+      const misPagos = data.pagos.filter(pa => pa.clienteCodigo === p.codigo);
+      const misComida = data.consumosComida.find(c => c.codigo === p.codigo);
+      const totalPersonalVentas = misVentas.reduce((sum, v) => sum + (v.total || 0), 0);
+      const totalPersonalPagos = misPagos.reduce((sum, pa) => sum + (pa.monto || 0), 0);
+      
+      let desayunos = 0, almuerzos = 0, cenas = 0;
+      if (misComida && misComida.dias) {
+        misComida.dias.forEach(d => {
+          if (d.desayuno) desayunos++;
+          if (d.almuerzo) almuerzos++;
+          if (d.cena) cenas++;
+        });
+      }
+      const totalComidasPersona = desayunos + almuerzos + cenas;
+      const costoComidaPersona = totalComidasPersona * data.precioComida;
+      
+      return {
+        'CODIGO': p.codigo,
+        'NOMBRE': p.apellidosNombres || p.nombre,
+        'AREA': p.areaTrabajo || p.area,
+        'DNI': p.dni || '',
+        'DESAYUNOS': desayunos,
+        'ALMUERZOS': almuerzos,
+        'CENAS': cenas,
+        'TOTAL COMIDAS': totalComidasPersona,
+        'COSTO COMIDA': costoComidaPersona,
+        'TOTAL COMPRAS': totalPersonalVentas,
+        'TOTAL PAGOS': totalPersonalPagos,
+        'DEUDA': Math.max(0, totalPersonalVentas - totalPersonalPagos)
+      };
+    });
+    const wsColaboradores = XLSX.utils.json_to_sheet(resumenCols);
+    XLSX.utils.book_append_sheet(wb, wsColaboradores, 'Colaboradores');
+    
+    // Hoja 3: Detalle de ventas
+    const ventasData = [];
+    data.ventas.forEach(v => {
+      if (v.items && v.items.length > 0) {
+        v.items.forEach(item => {
+          ventasData.push({
+            'FECHA': v.fecha,
+            'CODIGO': v.clienteCodigo,
+            'NOMBRE': v.clienteNombre,
+            'PRODUCTO': item.sku,
+            'CANTIDAD': item.cantidad,
+            'PRECIO': item.precioVenta || 0,
+            'SUBTOTAL': item.cantidad * (item.precioVenta || 0)
+          });
+        });
+      }
+    });
+    const wsVentas = XLSX.utils.json_to_sheet(ventasData);
+    XLSX.utils.book_append_sheet(wb, wsVentas, 'Ventas');
+    
+    // Hoja 4: Pagos
+    const pagosData = data.pagos.map(p => {
+      const trab = data.personal.find(pe => pe.codigo === p.clienteCodigo);
+      return {
+        'FECHA': p.fecha,
+        'CODIGO': p.clienteCodigo,
+        'NOMBRE': trab ? (trab.apellidosNombres || trab.nombre) : 'N/A',
+        'MONTO': p.monto
+      };
+    });
+    const wsPagos = XLSX.utils.json_to_sheet(pagosData);
+    XLSX.utils.book_append_sheet(wb, wsPagos, 'Pagos');
+    
+    // Hoja 5: Comida detallada
+    const comidaData = [];
+    data.consumosComida.forEach(c => {
+      const trab = data.personal.find(p => p.codigo === c.codigo);
+      const nombre = trab ? (trab.apellidosNombres || trab.nombre) : 'N/A';
+      const area = trab ? (trab.areaTrabajo || trab.area) : '';
+      
+      if (c.dias) {
+        c.dias.forEach(dia => {
+          if (dia.desayuno) {
+            comidaData.push({
+              'CODIGO': c.codigo,
+              'NOMBRE': nombre,
+              'AREA': area,
+              'DIA': dia.dia,
+              'TIPO': 'Desayuno',
+              'MONTO': data.precioComida
+            });
+          }
+          if (dia.almuerzo) {
+            comidaData.push({
+              'CODIGO': c.codigo,
+              'NOMBRE': nombre,
+              'AREA': area,
+              'DIA': dia.dia,
+              'TIPO': 'Almuerzo',
+              'MONTO': data.precioComida
+            });
+          }
+          if (dia.cena) {
+            comidaData.push({
+              'CODIGO': c.codigo,
+              'NOMBRE': nombre,
+              'AREA': area,
+              'DIA': dia.dia,
+              'TIPO': 'Cena',
+              'MONTO': data.precioComida
+            });
+          }
+        });
+      }
+    });
+    const wsComida = XLSX.utils.json_to_sheet(comidaData);
+    XLSX.utils.book_append_sheet(wb, wsComida, 'Comida');
+    
+    const excelPath = path.join(historialPath, `reporte_campana_${timestamp}.xlsx`);
+    XLSX.writeFile(wb, excelPath);
+    console.log('Excel guardado:', excelPath);
+    
+    // === 3. Resetear datos en store ===
+    store.set('ventas', []);
+    store.set('pagos', []);
+    store.set('consumosComida', []);
+    
+    // Actualizar fecha de inicio de campaña (nueva campaña)
+    const nuevaFecha = now.toISOString().split('T')[0];
+    store.set('fechaInicioCampana', nuevaFecha);
+    
+    console.log('=== CIERRE DE CAMPAÑA COMPLETADO ===');
+    
+    return {
+      success: true,
+      jsonPath: jsonPath,
+      excelPath: excelPath,
+      mensaje: 'Campaña cerrada correctamente'
+    };
+    
+  } catch (err) {
+    console.error('Error cierre campaña:', err);
+    return { success: false, error: err.message };
+  }
+});

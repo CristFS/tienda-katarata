@@ -252,14 +252,17 @@ table tr:hover {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0,0,0,0.5);
-  z-index: 1000;
+  background: rgba(0,0,0,0.7);
+  z-index: 9999;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .modal.active {
   display: flex;
+  opacity: 1;
 }
 
 .modal-content {
@@ -270,6 +273,31 @@ table tr:hover {
   max-width: 500px;
   max-height: 90vh;
   overflow-y: auto;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+  transform: scale(0.9);
+  transition: transform 0.2s ease;
+}
+
+.modal.active .modal-content {
+  transform: scale(1);
+}
+
+/* Inputs dentro del modal */
+#modal-producto input[type="text"],
+#modal-producto input[type="number"],
+#modal-producto select,
+#modal-personal input[type="text"],
+#modal-pago input[type="number"] {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 10000 !important;
+}
+
+/* Asegurar que los inputs sean clickeables */
+.modal-content input,
+.modal-content select,
+.modal-content button {
+  pointer-events: auto !important;
 }
 
 .modal-content h3 {
@@ -426,4 +454,78 @@ table tr:hover {
 .cliente-card .deuda {
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Calendario de Comida */
+.calendario-comida {
+  overflow-x: auto;
+}
+
+.celda-comida {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  margin: 2px;
+}
+
+.celda-comida:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+
+.celda-comida.desayuno-checked {
+  background: #fd7e14;
+  color: white;
+}
+
+.celda-comida.almuerzo-checked {
+  background: #28a745;
+  color: white;
+}
+
+.celda-comida.cena-checked {
+  background: #6f42c1;
+  color: white;
+}
+
+/* Botón cerrar campaña */
+.btn-cerrar-campana {
+  background: var(--accent);
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 1rem;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.btn-cerrar-campana:hover {
+  background: #c53030;
+  transform: scale(1.02);
+}
+
+/* Detalle expandible */
+.detalle-colapsable {
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.detalle-colapsable:hover {
+  background: rgba(0,0,0,0.05);
+}
+
+.icono-expandir {
+  transition: transform 0.2s;
+}
+
+.icono-expandir.expanded {
+  transform: rotate(90deg);
 }

@@ -189,31 +189,6 @@ function renderProductos(content) {
         </tbody>
       </table>
     </div>
-    <div id="modal-producto" class="modal">
-      <div class="modal-content">
-        <h3 id="modal-titulo-producto">Nuevo Producto</h3>
-        <form id="form-producto" onsubmit="guardarProducto(event)">
-          <input type="hidden" name="sku" id="producto-sku">
-          <div class="form-group"><label>Nombre</label><input type="text" name="nombre" id="producto-nombre" required></div>
-          <div class="form-group"><label>Categoría</label>
-            <select name="categoria" id="producto-categoria">
-              <option value="Bebida">Bebida</option>
-              <option value="Snack">Snack/Galleta</option>
-              <option value="Panadería">Panadería/Dulce</option>
-              <option value="Chocolate">Chocolate/Caramelo</option>
-              <option value="Otro">Otro</option>
-            </select>
-          </div>
-          <div class="form-group"><label>Stock</label><input type="number" name="stock" id="producto-stock" value="0" required></div>
-          <div class="form-group"><label>Precio de Compra</label><input type="number" name="precioCompra" id="producto-precio-compra" step="0.10" value="0"></div>
-          <div class="form-group"><label>Precio de Venta</label><input type="number" name="precioVenta" id="producto-precio-venta" step="0.10" value="0"></div>
-          <div style="display:flex; gap:10px; margin-top:20px">
-            <button type="submit" class="btn btn-primary">Guardar</button>
-            <button type="button" class="btn" onclick="closeModal('producto')">Cancelar</button>
-          </div>
-        </form>
-      </div>
-    </div>
   `;
 }
 
@@ -359,22 +334,47 @@ window.confirmarIngreso = async function() {
 };
 
 // ================== PERSONAL ==================
+let personalBusqueda = '';
+
 async function renderPersonal(content) {
   const personalData = await ipcRenderer.invoke('get-personal');
   personal = (personalData && Array.isArray(personalData)) ? personalData : [];
   
+  // Guardar valor actual del input antes de renderizar
+  const inputActual = document.getElementById('busqueda-personal')?.value || '';
+  
+  // Filtrar según búsqueda - SOLO por código y nombre
+  const personalFiltrado = personalBusqueda 
+    ? personal.filter(p => {
+        const codigo = (p.codigo || '').toLowerCase();
+        const nombre = (p.apellidosNombres || p.nombre || '').toLowerCase();
+        const termino = personalBusqueda.toLowerCase();
+        return codigo.includes(termino) || nombre.includes(termino);
+      })
+    : personal;
+  
   let html = '<div style="padding:20px; font-family:Arial">';
   html += '<h2>👥 Personal</h2>';
-  html += '<div style="margin:15px 0">';
+  html += '<div style="margin:15px 0; display:flex; gap:10px; flex-wrap:wrap; align-items:center">';
   html += '<button onclick="showModal(\'personal\')" style="padding:8px 16px; background:#007bff; color:white; border:none; border-radius:4px; cursor:pointer">➕ Nuevo Personal</button>';
-  html += '<button onclick="importarPersonalExcel()" style="padding:8px 16px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer; margin-left:10px">📥 Importar desde Excel</button>';
-  html += '<button onclick="exportarPersonalExcel()" style="padding:8px 16px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer; margin-left:10px">📤 Exportar a Excel</button>';
+  html += '<button onclick="importarPersonalExcel()" style="padding:8px 16px; background:#28a745; color:white; border:none; border-radius:4px; cursor:pointer">📥 Importar desde Excel</button>';
+  html += '<button onclick="exportarPersonalExcel()" style="padding:8px 16px; background:#6c757d; color:white; border:none; border-radius:4px; cursor:pointer">📤 Exportar a Excel</button>';
+  html += '<button onclick="borrarTodoPersonal()" style="padding:8px 16px; background:#dc3545; color:white; border:none; border-radius:4px; cursor:pointer; margin-left:auto">🗑️ Borrar Todo</button>';
   html += '</div>';
   
-  if (personal.length === 0) {
-    html += '<p style="color:orange">⚠️ No hay personal cargado. Use el botón "Importar desde Excel" para cargar los datos.</p>';
+  // Barra de búsqueda - solo código y nombre
+  html += '<div style="margin:15px 0">';
+  html += '<input type="text" id="busqueda-personal" placeholder="🔍 Buscar por código o nombre..." value="" oninput="buscarPersonal(this.value)" style="width:100%; padding:12px; border:1px solid #ddd; border-radius:5px; font-size:1rem">';
+  html += '</div>';
+  
+  if (personalFiltrado.length === 0) {
+    if (personalBusqueda) {
+      html += '<p style="color:orange">⚠️ No se encontraron resultados para "' + personalBusqueda + '"</p>';
+    } else {
+      html += '<p style="color:orange">⚠️ No hay personal cargado. Use el botón "Importar desde Excel" para cargar los datos.</p>';
+    }
   } else {
-    html += '<p>Total: ' + personal.length + ' trabajadores</p>';
+    html += '<p>Mostrando ' + personalFiltrado.length + ' de ' + personal.length + ' trabajadores</p>';
     html += '<table style="width:100%; border-collapse:collapse; border:1px solid #ccc">';
     html += '<thead><tr style="background:#f0f0f0">';
     html += '<th style="padding:10px; border:1px solid #ccc; text-align:left">Código</th>';
@@ -384,8 +384,8 @@ async function renderPersonal(content) {
     html += '<th style="padding:10px; border:1px solid #ccc; text-align:center">Acciones</th>';
     html += '</tr></thead><tbody>';
     
-    for (let i = 0; i < personal.length; i++) {
-      let p = personal[i];
+    for (let i = 0; i < personalFiltrado.length; i++) {
+      let p = personalFiltrado[i];
       let nombre = p.apellidosNombres || p.nombre || '-';
       let area = p.areaTrabajo || p.area || '-';
       html += '<tr>';
@@ -402,6 +402,43 @@ async function renderPersonal(content) {
   }
   html += '</div>';
   content.innerHTML = html;
+}
+
+// Función de búsqueda - guarda valor y restaura foco
+window.buscarPersonal = function(texto) {
+  personalBusqueda = texto;
+  const input = document.getElementById('busqueda-personal');
+  const valorActual = input ? input.value : '';
+  
+  // Renderizar
+  const content = document.getElementById('content');
+  if (content) {
+    renderPersonal(content);
+    // Restaurar valor y foco después de renderizar
+    setTimeout(() => {
+      const nuevoInput = document.getElementById('busqueda-personal');
+      if (nuevoInput) {
+        nuevoInput.value = valorActual;
+        nuevoInput.focus();
+      }
+    }, 10);
+  }
+};
+
+// Función para borrar todo el personal
+window.borrarTodoPersonal = async function() {
+  if (!confirm('⚠️ ¿Estás seguro de eliminar TODO el personal?\n\nEsta acción eliminará todos los registros de personal del sistema y no se puede deshacer.')) {
+    return;
+  }
+  if (!confirm('¿CONFIRMAR? Se eliminarán todos los trabajadores.')) {
+    return;
+  }
+  
+  personal = [];
+  await ipcRenderer.invoke('save-personal', []);
+  personalBusqueda = '';
+  await renderPersonal(document.getElementById('content'));
+  alert('✅ Todo el personal ha sido eliminado');
 }
 
 // Editar personal
@@ -796,17 +833,6 @@ function renderDeudas(content) {
         </tbody>
       </table>
     </div>
-    <div id="modal-pago" class="modal">
-      <div class="modal-content">
-        <h3>Registrar Pago</h3>
-        <form id="form-pago" onsubmit="guardarPago(event)">
-          <input type="hidden" name="codigo" id="pago-personal-codigo">
-          <div class="form-group"><label>Monto a Pagar</label><input type="number" name="monto" step="0.10" required></div>
-          <button type="submit" class="btn btn-success">Registrar</button>
-          <button type="button" class="btn" onclick="closeModal('pago')">Cancelar</button>
-        </form>
-      </div>
-    </div>
   `;
 }
 
@@ -872,6 +898,8 @@ window.showModal = function(id, noReset = false) {
       document.getElementById('producto-precio-compra').value = 0;
       document.getElementById('producto-precio-venta').value = 0;
       document.getElementById('modal-titulo-producto').textContent = 'Nuevo Producto';
+      // Enfocar el campo nombre después de un pequeño retraso
+      setTimeout(() => document.getElementById('producto-nombre')?.focus(), 100);
     }
     if (id === 'personal') {
       document.getElementById('personal-codigo-original').value = '';
@@ -880,7 +908,11 @@ window.showModal = function(id, noReset = false) {
       document.getElementById('personal-dni').value = '';
       document.getElementById('personal-area').value = '';
       document.getElementById('modal-titulo-personal').textContent = 'Nuevo Personal';
+      setTimeout(() => document.getElementById('personal-nombres')?.focus(), 100);
     }
+  } else {
+    // Cuando se-edita, también enfocar
+    setTimeout(() => document.getElementById('producto-nombre')?.focus(), 100);
   }
 };
 
