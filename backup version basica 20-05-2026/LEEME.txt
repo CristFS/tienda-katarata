@@ -1,0 +1,59 @@
+═══════════════════════════════════════════════════════════════════════════════
+                    RESPALDO - VERSIÓN BÁSICA 20/05/2026
+═══════════════════════════════════════════════════════════════════════════════
+
+Fecha del backup: 20 de mayo de 2026
+Descripción: Versión simplificada sin gráficos avanzados (Runchart, Pareto)
+
+
+CONTENIDO DEL BACKUP:
+═════════════════════
+  ├── app.js          (Código principal del frontend - ~1100 líneas)
+  ├── index.html      (Estructura HTML)
+  ├── main.js         (Código del proceso principal Electron)
+  └── package.json    (Configuración del proyecto)
+
+
+FUNCIONALIDADES INCLUIDAS:
+══════════════════════════
+  ✅ Dashboard - Stats básicos (ventas, deuda, ventas hoy, productos)
+  ✅ Productos - CRUD completo con SKU automático
+  ✅ Ingresos - Registrar entrada de mercancía
+  ✅ Personal - Importar/Exportar Excel, editar/eliminar
+  ✅ Comida - Registro simple de consumos por texto
+  ✅ Ventas - Registrar fiados a trabajadores
+  ✅ Deudas - Ver deuda y registrar pagos
+  ✅ Reportes - Stats simples
+
+
+FUNCIONALIDADES ELIMINADAS:
+══════════════════════════
+  ❌ Gráfico Runchart (control estadístico)
+  ❌ Gráfico Pareto (análisis 80/20)
+  ❌ Información de campaña (inicio/fin 14 días)
+  ❌ Corrección automática de SKUs
+  ❌ Calendario interactivo de comidas
+  ❌ Precio ponderado en ingresos
+  ❌ Recuperar/Cerrar campaña
+
+
+CÓMO RESTAURAR ESTA VERSIÓN:
+═════════════════════════════
+
+Opción 1 - Restaurar archivos (si tienes el código fuente):
+  1. Copiar app.js → src/renderer/app.js
+  2. Copiar index.html → src/renderer/index.html
+  3. Copiar main.js → src/main/main.js
+  4. Ejecutar: npm start
+
+Opción 2 - Usar el ejecutable ya compilado:
+  Ubicación del .exe:
+  dist\Tienda Katarata-win32-x64\Tienda Katarata.exe
+
+
+NOTAS:
+══════
+- Esta versión tiene ~47% menos código que la versión avanzada
+- Es más estable pero menos visual
+- Si necesitas funcionalidades avanzadas, hay otra versión más reciente
+═══════════════════════════════════════════════════════════════════════════════

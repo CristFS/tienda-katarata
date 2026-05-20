@@ -1,0 +1,769 @@
+{
+  "fechaCierre": "2026-05-18T23:25:01.311Z",
+  "totalVentas": 43,
+  "totalPagos": 0,
+  "totalDeuda": 5549.3,
+  "deudores": [
+    {
+      "codigo": "1",
+      "nombre": "ABDIAS CASTILLO CASTILLO",
+      "deuda": 840
+    },
+    {
+      "codigo": "222",
+      "nombre": "PAUL HIALINO SOLIS MAYLLE",
+      "deuda": 540
+    },
+    {
+      "codigo": "4",
+      "nombre": "ALBERTO VENTURA CARRION",
+      "deuda": 450
+    },
+    {
+      "codigo": "10",
+      "nombre": "ALFONSO GREGORIO MERMA VELASCO",
+      "deuda": 450
+    },
+    {
+      "codigo": "2",
+      "nombre": "AGUSTIN TAMAYO ROJAS BERROSPI",
+      "deuda": 420
+    },
+    {
+      "codigo": "3",
+      "nombre": "ALBERTO ILAQUITA APAZA",
+      "deuda": 420
+    },
+    {
+      "codigo": "120",
+      "nombre": "JUSTINO YANA CHOQUEPATA",
+      "deuda": 420
+    },
+    {
+      "codigo": "227",
+      "nombre": "BERTIS SANDRO PATRICIO MONTALVO",
+      "deuda": 420
+    },
+    {
+      "codigo": "7",
+      "nombre": "ALEX SANDRO CONDORI LLACCHUA",
+      "deuda": 300
+    },
+    {
+      "codigo": "88",
+      "nombre": "JAIME ARTURO NAVARRO",
+      "deuda": 300
+    },
+    {
+      "codigo": "14",
+      "nombre": "ALFREDO IDME JARA",
+      "deuda": 240
+    },
+    {
+      "codigo": "19",
+      "nombre": "ANTONIO DIONICIO CCARI QUISPE",
+      "deuda": 240
+    },
+    {
+      "codigo": "24",
+      "nombre": "BRAYAN MANUEL GAITAN SANCHEZ",
+      "deuda": 225
+    },
+    {
+      "codigo": "5",
+      "nombre": "ALDILMER OMAR ALTAMIRANO CORONEL",
+      "deuda": 120
+    },
+    {
+      "codigo": "142",
+      "nombre": "MARIO EDWIN ENRIQUEZ FERNANDEZ",
+      "deuda": 90
+    },
+    {
+      "codigo": "92",
+      "nombre": "JESUS JOSE ATAURIMA INGA",
+      "deuda": 45.8
+    },
+    {
+      "codigo": "131",
+      "nombre": "LUIS ELVIS CHOQUE GUTIERREZ",
+      "deuda": 14
+    },
+    {
+      "codigo": "97",
+      "nombre": "JHON BERROSPI CRUZ",
+      "deuda": 7
+    },
+    {
+      "codigo": "18",
+      "nombre": "ANGEL FERNANDO JULCA CARRANZA",
+      "deuda": 4.5
+    },
+    {
+      "codigo": "22",
+      "nombre": "BILL CLINTON PATRISIO MONTALVO",
+      "deuda": 3
+    }
+  ],
+  "detalleVentas": [
+    {
+      "id": 1778950956765,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "131",
+      "clienteNombre": "LUIS ELVIS CHOQUE GUTIERREZ",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 1,
+          "precioVenta": 1.4
+        }
+      ],
+      "total": 1.4
+    },
+    {
+      "id": 1778951602029,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "131",
+      "clienteNombre": "LUIS ELVIS CHOQUE GUTIERREZ",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 9,
+          "precioVenta": 1.4
+        }
+      ],
+      "total": 12.6
+    },
+    {
+      "id": 1778962972710,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "97",
+      "clienteNombre": "JHON BERROSPI CRUZ",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 5,
+          "precioVenta": 1.4
+        }
+      ],
+      "total": 7
+    },
+    {
+      "id": 1778963349424,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "92",
+      "clienteNombre": "JESUS JOSE ATAURIMA INGA",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 22,
+          "precioVenta": 1.4
+        }
+      ],
+      "total": 30.799999999999997
+    },
+    {
+      "id": 1778965214108,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "22",
+      "clienteNombre": "BILL CLINTON PATRISIO MONTALVO",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 2,
+          "precioVenta": 1.5
+        }
+      ],
+      "total": 3
+    },
+    {
+      "id": 1778965655912,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "24",
+      "clienteNombre": "BRAYAN MANUEL GAITAN SANCHEZ",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 150,
+          "precioVenta": 1.5
+        }
+      ],
+      "total": 225
+    },
+    {
+      "id": 1778966521182,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "92",
+      "clienteNombre": "JESUS JOSE ATAURIMA INGA",
+      "items": [
+        {
+          "sku": "P84154",
+          "cantidad": 10,
+          "precioVenta": 1.5
+        }
+      ],
+      "total": 15
+    },
+    {
+      "id": 1778966836764,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778966842083,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778966844419,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "4",
+      "clienteNombre": "ALBERTO VENTURA CARRION",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.2476,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.6882,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.0266,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.8777,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.843,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.033,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.5886,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.0557,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967922908.1453,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967964237.2131,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967964237.5718,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778967964237.7913,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778968051800.0107,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "10",
+      "clienteNombre": "ALFONSO GREGORIO MERMA VELASCO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778968051800.4663,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "10",
+      "clienteNombre": "ALFONSO GREGORIO MERMA VELASCO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778968051800.9355,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "10",
+      "clienteNombre": "ALFONSO GREGORIO MERMA VELASCO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1778968051800.5706,
+      "fecha": "16/5/2026",
+      "clienteCodigo": "10",
+      "clienteNombre": "ALFONSO GREGORIO MERMA VELASCO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida"
+    },
+    {
+      "id": 1779029159102,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "1",
+      "clienteNombre": "ABDIAS CASTILLO CASTILLO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 14,
+          "precio": 30
+        }
+      ],
+      "total": 420,
+      "tipo": "comida",
+      "descripcion": "Comida 14 días"
+    },
+    {
+      "id": 1779029171182,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "2",
+      "clienteNombre": "AGUSTIN TAMAYO ROJAS BERROSPI",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 14,
+          "precio": 30
+        }
+      ],
+      "total": 420,
+      "tipo": "comida",
+      "descripcion": "Comida 14 días"
+    },
+    {
+      "id": 1779029185134,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "3",
+      "clienteNombre": "ALBERTO ILAQUITA APAZA",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 14,
+          "precio": 30
+        }
+      ],
+      "total": 420,
+      "tipo": "comida",
+      "descripcion": "Comida 14 días"
+    },
+    {
+      "id": 1779029200030,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "4",
+      "clienteNombre": "ALBERTO VENTURA CARRION",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 14,
+          "precio": 30
+        }
+      ],
+      "total": 420,
+      "tipo": "comida",
+      "descripcion": "Comida 14 días"
+    },
+    {
+      "id": 1779036809347,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "5",
+      "clienteNombre": "ALDILMER OMAR ALTAMIRANO CORONEL",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 4,
+          "precio": 30
+        }
+      ],
+      "total": 120,
+      "tipo": "comida",
+      "descripcion": "Comida 4 días"
+    },
+    {
+      "id": 1779036817004,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "7",
+      "clienteNombre": "ALEX SANDRO CONDORI LLACCHUA",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 9,
+          "precio": 30
+        }
+      ],
+      "total": 270,
+      "tipo": "comida",
+      "descripcion": "Comida 9 días"
+    },
+    {
+      "id": 1779036850820,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "10",
+      "clienteNombre": "ALFONSO GREGORIO MERMA VELASCO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 11,
+          "precio": 30
+        }
+      ],
+      "total": 330,
+      "tipo": "comida",
+      "descripcion": "Comida 11 días"
+    },
+    {
+      "id": 1779036859035,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "14",
+      "clienteNombre": "ALFREDO IDME JARA",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 8,
+          "precio": 30
+        }
+      ],
+      "total": 240,
+      "tipo": "comida",
+      "descripcion": "Comida 8 días"
+    },
+    {
+      "id": 1779037798273,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "7",
+      "clienteNombre": "ALEX SANDRO CONDORI LLACCHUA",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 1,
+          "precio": 30
+        }
+      ],
+      "total": 30,
+      "tipo": "comida",
+      "descripcion": "Comida 1 días"
+    },
+    {
+      "id": 1779037827153,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "19",
+      "clienteNombre": "ANTONIO DIONICIO CCARI QUISPE",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 8,
+          "precio": 30
+        }
+      ],
+      "total": 240,
+      "tipo": "comida",
+      "descripcion": "Comida 8 días"
+    },
+    {
+      "id": 1779038089504,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "88",
+      "clienteNombre": "JAIME ARTURO NAVARRO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 10,
+          "precio": 30
+        }
+      ],
+      "total": 300,
+      "tipo": "comida",
+      "descripcion": "Comida 10 días"
+    },
+    {
+      "id": 1779038570724,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "120",
+      "clienteNombre": "JUSTINO YANA CHOQUEPATA",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 14,
+          "precio": 30
+        }
+      ],
+      "total": 420,
+      "tipo": "comida",
+      "descripcion": "Comida 14 días"
+    },
+    {
+      "id": 1779039273217,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "222",
+      "clienteNombre": "PAUL HIALINO SOLIS MAYLLE",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 9,
+          "precio": 30
+        }
+      ],
+      "total": 270,
+      "tipo": "comida",
+      "descripcion": "Comida 9 días"
+    },
+    {
+      "id": 1779039285264,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "222",
+      "clienteNombre": "PAUL HIALINO SOLIS MAYLLE",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 9,
+          "precio": 30
+        }
+      ],
+      "total": 270,
+      "tipo": "comida",
+      "descripcion": "Comida 9 días"
+    },
+    {
+      "id": 1779039302375,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "142",
+      "clienteNombre": "MARIO EDWIN ENRIQUEZ FERNANDEZ",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 3,
+          "precio": 30
+        }
+      ],
+      "total": 90,
+      "tipo": "comida",
+      "descripcion": "Comida 3 días"
+    },
+    {
+      "id": 1779039648979,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "227",
+      "clienteNombre": "BERTIS SANDRO PATRICIO MONTALVO",
+      "items": [
+        {
+          "sku": "COMIDA",
+          "cantidad": 14,
+          "precio": 30
+        }
+      ],
+      "total": 420,
+      "tipo": "comida",
+      "descripcion": "Comida 14 días"
+    },
+    {
+      "id": 1779058219791,
+      "fecha": "17/5/2026",
+      "clienteCodigo": "18",
+      "clienteNombre": "ANGEL FERNANDO JULCA CARRANZA",
+      "items": [
+        {
+          "sku": "P00001",
+          "cantidad": 1,
+          "precioVenta": 3
+        },
+        {
+          "sku": "S00001",
+          "cantidad": 1,
+          "precioVenta": 1.5
+        }
+      ],
+      "total": 4.5
+    }
+  ],
+  "detallePagos": []
+}

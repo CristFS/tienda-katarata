@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tienda Katarata</title>
+  <link rel="stylesheet" href="styles/main.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="app-container">
+    <aside class="sidebar">
+      <div class="logo">
+        <h2>🏪 Tienda</h2>
+        <p>Katarata</p>
+      </div>
+      <nav class="menu">
+        <ul>
+          <li class="active" data-view="dashboard">📊 Dashboard</li>
+          <li data-view="productos">📦 Productos</li>
+          <li data-view="ingresos">📥 Ingresos</li>
+          <li data-view="personal">👨‍💼 Personal</li>
+          <li data-view="comida">🍽️ Comida</li>
+          <li data-view="ventas">💰 Ventas</li>
+          <li data-view="deudas">📋 Deudas</li>
+          <li data-view="reportes">📈 Reportes</li>
+        </ul>
+      </nav>
+    </aside>
+    <main class="main-content">
+      <header class="top-bar">
+        <h1 id="page-title">Dashboard</h1>
+        <div class="header-info">
+          <span id="date-display"></span>
+        </div>
+      </header>
+      <div id="content" class="content"></div>
+    </main>
+  </div>
+
+  <!-- Modal Personal -->
+  <div id="modal-personal" class="modal">
+    <div class="modal-content">
+      <h3 id="modal-titulo-personal">Nuevo Personal</h3>
+      <form id="form-personal" onsubmit="guardarPersonal(event)">
+        <input type="hidden" id="personal-codigo-original">
+        <div class="form-group">
+          <label>Código</label>
+          <input type="text" id="personal-codigo" readonly style="background:#f0f0f0">
+        </div>
+        <div class="form-group">
+          <label>Nombres y Apellidos</label>
+          <input type="text" id="personal-nombres" required>
+        </div>
+        <div class="form-group">
+          <label>DNI</label>
+          <input type="text" id="personal-dni" required>
+        </div>
+        <div class="form-group">
+          <label>Área de Trabajo</label>
+          <input type="text" id="personal-area" required>
+        </div>
+        <div style="display:flex; gap:10px; margin-top:20px">
+          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="button" class="btn" onclick="closeModal('personal')">Cancelar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal Producto (ya está en app.js renderProductos, pero se incluye aquí para referencia) -->
+  <!-- El modal de producto se genera dinámicamente en renderProductos() -->
+
+  <script src="app.js"></script>
+</body>
+</html>
