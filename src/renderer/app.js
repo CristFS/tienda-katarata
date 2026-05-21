@@ -1,6 +1,28 @@
-console.log('app.js starting...');
-const { ipcRenderer } = require('electron');
+﻿console.log('app.js starting...');
 console.log('electron loaded');
+
+// Usar API segura del preload
+const api = window.electronAPI || {
+  // Fallback para desarrollo (si preload no está cargado)
+  getProductos: () => ipcRenderer.invoke('get-productos'),
+  saveProductos: (data) => ipcRenderer.invoke('save-productos', data),
+  getVentas: () => ipcRenderer.invoke('get-ventas'),
+  saveVentas: (data) => ipcRenderer.invoke('save-ventas', data),
+  getPagos: () => ipcRenderer.invoke('get-pagos'),
+  savePagos: (data) => ipcRenderer.invoke('save-pagos', data),
+  getPersonal: () => ipcRenderer.invoke('get-personal'),
+  savePersonal: (data) => ipcRenderer.invoke('save-personal', data),
+  importExcelPersonal: (buffer) => ipcRenderer.invoke('import-excel-personal', buffer),
+  exportExcel: (wbJson, filename) => ipcRenderer.invoke('export-excel', wbJson, filename),
+  getFechaInicioCampana: () => ipcRenderer.invoke('get-fecha-inicio-campana'),
+  saveFechaInicioCampana: (fecha) => ipcRenderer.invoke('save-fecha-inicio-campana', fecha),
+  getConsumosComida: () => ipcRenderer.invoke('get-consumos-comida'),
+  saveConsumosComida: (data) => ipcRenderer.invoke('save-consumos-comida', data),
+  cerrarCampana: (data) => ipcRenderer.invoke('cerrar-campana', data),
+  recuperarCampana: () => ipcRenderer.invoke('recuperar-campana'),
+  getNumeroCampana: () => ipcRenderer.invoke('get-numero-campana'),
+  setNumeroCampana: (n) => ipcRenderer.invoke('set-numero-campana', n)
+};
 
 let productos = [];
 let ventas = [];
@@ -8,7 +30,38 @@ let pagos = [];
 let personal = [];
 let consumosComida = [];
 let currentView = 'dashboard';
+let numeroCampanaActual = 1;
+let fechaInicioCampana = new Date().toISOString().split('T')[0];
 
+// Constantes
+const PRECIO_COMIDA = 10;
+const TOTAL_DIAS_CAMPANA = 14;
+const MAX_COMIDAS_POR_PERSONA = TOTAL_DIAS_CAMPANA * 3; // 42
+
+// Función helper: calcular fecha real para un día de campaña
+function fechaDiaCampana(dia) {
+  if (!fechaInicioCampana) return 'D' + dia;
+  const inicio = new Date(fechaInicioCampana + 'T12:00:00');
+  const fecha = new Date(inicio);
+  fecha.setDate(inicio.getDate() + (dia - 1));
+  return fecha.toLocaleDateString('es', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Función para sanitizar HTML (prevenir XSS)
+function sanitizeHTML(str) {
+  if (str === null || str === undefined) return '';
+  const div = document.createElement('div');
+  div.textContent = String(str);
+  return div.innerHTML;
+}
+
+// Función para escapar comillas simples en JavaScript
+function escapeJS(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/'/g, "\\'");
+}
+
+// Función para obtener info de personal
 function getPersonalInfo(p) {
   return {
     nombre: p.apellidosNombres || p.nombre || '-',
@@ -25,6 +78,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupNavigation();
     renderView('dashboard');
     document.getElementById('date-display').textContent = new Date().toLocaleDateString('es');
+    
+    // Click fuera del dropdown de comida lo cierra
+    document.addEventListener('click', function(e) {
+      const searchGroup = document.getElementById('comida-search-group');
+      const resultados = document.getElementById('comida-resultados');
+      if (resultados && searchGroup && !searchGroup.contains(e.target)) {
+        resultados.style.display = 'none';
+      }
+    });
   } catch(e) {
     console.error('Error inicial:', e);
   }
@@ -33,46 +95,83 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadData() {
   try {
     // Cargar productos
-    const productosData = await ipcRenderer.invoke('get-productos');
+    const productosData = await api.getProductos();
     productos = Array.isArray(productosData) ? productosData : [];
     console.log('Cargados productos:', productos.length);
     
     // Cargar ventas
-    const ventasData = await ipcRenderer.invoke('get-ventas');
+    const ventasData = await api.getVentas();
     ventas = Array.isArray(ventasData) ? ventasData : [];
     console.log('Cargadas ventas:', ventas.length);
     
     // Cargar pagos
-    const pagosData = await ipcRenderer.invoke('get-pagos');
+    const pagosData = await api.getPagos();
     pagos = Array.isArray(pagosData) ? pagosData : [];
     console.log('Cargados pagos:', pagos.length);
     
     // Cargar personal
-    const personalData = await ipcRenderer.invoke('get-personal');
+    const personalData = await api.getPersonal();
     personal = Array.isArray(personalData) ? personalData : [];
     console.log('Cargado personal:', personal.length);
     
     // Cargar consumos de comida
-    const consumosData = await ipcRenderer.invoke('get-consumos-comida');
+    const consumosData = await api.getConsumosComida();
     consumosComida = Array.isArray(consumosData) ? consumosData : [];
     console.log('Cargados consumos comida:', consumosComida.length);
+
+    // Cargar número de campaña
+    try {
+      const n = await api.getNumeroCampana();
+      if (typeof n === 'number' && n > 0) numeroCampanaActual = n;
+      const indicator = document.getElementById('campana-numero');
+      if (indicator) indicator.textContent = numeroCampanaActual;
+    } catch(e) {
+      console.warn('No se pudo cargar número de campaña:', e);
+    }
+
+    // Cargar fecha de inicio de campaña
+    try {
+      const f = await api.getFechaInicioCampana();
+      if (f) fechaInicioCampana = f;
+    } catch(e) {
+      console.warn('No se pudo cargar fecha inicio campaña:', e);
+    }
   } catch(e) {
     console.error('Error cargando datos:', e);
     alert('Error al cargar datos: ' + e.message);
   }
 }
 
+// Limpiar listeners previos para evitar memory leaks
+let navCleanup = null;
 function setupNavigation() {
+  // Remover listeners anteriores si existen
+  if (navCleanup) {
+    navCleanup();
+    navCleanup = null;
+  }
+  
   const items = document.querySelectorAll('.menu li');
+  const handlers = [];
   items.forEach(li => {
-    li.addEventListener('click', () => {
+    const handler = () => {
       items.forEach(l => l.classList.remove('active'));
       li.classList.add('active');
       currentView = li.dataset.view;
-      document.getElementById('page-title').textContent = li.textContent.trim();
+      const titleEl = document.getElementById('page-title');
+      if (titleEl) titleEl.textContent = li.textContent.trim();
       renderView(currentView);
-    });
+    };
+    li.addEventListener('click', handler);
+    handlers.push({ el: li, handler });
   });
+  
+  // Función de cleanup
+  navCleanup = () => {
+    handlers.forEach(({ el, handler }) => {
+      el.removeEventListener('click', handler);
+    });
+  };
 }
 
 async function renderView(view) {
@@ -153,7 +252,7 @@ function renderDashboard(content) {
           <table>
             <thead><tr><th>SKU</th><th>Producto</th><th>Categoría</th><th>Stock</th></tr></thead>
             <tbody>
-              ${productos.slice(0, 5).map(p => `<tr><td>${p.sku || '-'}</td><td>${p.nombre}</td><td>${p.categoria}</td><td>${p.stock}</td></tr>`).join('')}
+              ${productos.slice(0, 5).map(p => `<tr><td>${sanitizeHTML(p.sku) || '-'}</td><td>${sanitizeHTML(p.nombre)}</td><td>${sanitizeHTML(p.categoria)}</td><td>${p.stock}</td></tr>`).join('')}
             </tbody>
           </table>
         ` : '<p style="padding:20px; text-align:center; color:#666">No hay productos</p>'}
@@ -168,8 +267,8 @@ function renderDashboard(content) {
                 const detalle = getDetalleDeuda(c.codigo);
                 return `
                 <tr>
-                  <td>${c.apellidosNombres}</td>
-                  <td>${c.areaTrabajo}</td>
+                  <td>${sanitizeHTML(c.apellidosNombres)}</td>
+                  <td>${sanitizeHTML(c.areaTrabajo)}</td>
                   <td>
                     <span style="color:#dc3545; font-weight:bold">S/ ${detalle.total.toFixed(2)}</span>
                     <br><small style="color:#666">Com: S/ ${detalle.comida.toFixed(2)} | Com: S/ ${detalle.compras.toFixed(2)}</small>
@@ -227,15 +326,15 @@ function renderProductos(content) {
         <tbody>
           ${productos.map(p => `
             <tr>
-              <td><strong>${p.sku || 'Sin código'}</strong></td>
-              <td><strong>${p.nombre}</strong></td>
-              <td><span class="badge" style="background:${p.categoria === 'Snack' ? '#fef3c7' : p.categoria === 'Bebida' ? '#dbeafe' : p.categoria === 'Panadería' ? '#fce7f3' : p.categoria === 'Chocolate' ? '#f3e8ff' : '#e5e7eb'}; color:#333; padding:3px 8px; border-radius:3px">${p.categoria}</span></td>
+              <td><strong>${sanitizeHTML(p.sku) || 'Sin código'}</strong></td>
+              <td><strong>${sanitizeHTML(p.nombre)}</strong></td>
+              <td><span class="badge" style="background:${p.categoria === 'Snack' ? '#fef3c7' : p.categoria === 'Bebida' ? '#dbeafe' : p.categoria === 'Panadería' ? '#fce7f3' : p.categoria === 'Chocolate' ? '#f3e8ff' : '#e5e7eb'}; color:#333; padding:3px 8px; border-radius:3px">${sanitizeHTML(p.categoria)}</span></td>
               <td>${p.stock}</td>
               <td>S/ ${(p.precioCompra || 0).toFixed(2)}</td>
               <td>S/ ${(p.precioVenta || 0).toFixed(2)}</td>
               <td>
-                <button class="btn" style="background:#007bff; color:white; padding:5px 10px; margin-right:5px" onclick="editarProducto('${p.sku}')">✏️</button>
-                <button class="btn btn-danger" style="padding:5px 10px" onclick="eliminarProducto('${p.sku}')">🗑️</button>
+                <button class="btn" style="background:#007bff; color:white; padding:5px 10px; margin-right:5px" onclick="editarProducto('${sanitizeHTML(p.sku)}')">✏️</button>
+                <button class="btn btn-danger" style="padding:5px 10px" onclick="eliminarProducto('${sanitizeHTML(p.sku)}')">🗑️</button>
               </td>
             </tr>
           `).join('') || '<tr><td colspan="7" style="text-align:center">No hay productos</td></tr>'}
@@ -307,120 +406,133 @@ window.guardarProducto = async function(e) {
     });
   }
   
-  await ipcRenderer.invoke('save-productos', productos);
+  await api.saveProductos(productos);
   closeModal('producto');
   renderView('productos');
-  document.getElementById('producto-sku').value = '';
-  document.getElementById('modal-titulo-producto').textContent = 'Nuevo Producto';
+  const elSku = document.getElementById('producto-sku');
+  const elTituloProd = document.getElementById('modal-titulo-producto');
+  if (elSku) elSku.value = '';
+  if (elTituloProd) elTituloProd.textContent = 'Nuevo Producto';
 };
 
 window.eliminarProducto = async function(sku) {
   if (confirm('¿Eliminar este producto?')) {
     productos = productos.filter(p => p.sku !== sku);
-    await ipcRenderer.invoke('save-productos', productos);
+    await api.saveProductos(productos);
     renderView('productos');
   }
 };
 
 // ================== INGRESOS ==================
 function renderIngresos(content) {
+  // Crear IDs únicos para evitar conflictos con elementos viejos
+  const timestamp = Date.now();
+  
   content.innerHTML = `
     <div class="card">
       <h3>📥 Ingreso de Mercancía</h3>
       <p style="color:#666; margin-bottom:20px">Registre la entrada de productos al almacén</p>
       <div class="form-group">
         <label>Seleccionar Producto</label>
-        <select id="ingreso-producto" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px; font-size:1rem" onchange="cargarProductoIngreso()">
+        <select id="ingreso-producto-${timestamp}" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px; font-size:1rem" onchange="cargarProductoIngreso(${timestamp})">
           <option value="">-- Seleccione un producto --</option>
-          ${productos.map(p => `<option value="${p.sku}">${p.nombre} (${p.categoria})</option>`).join('')}
+          ${productos.map(p => `<option value="${sanitizeHTML(p.sku)}">${sanitizeHTML(p.nombre)} (${sanitizeHTML(p.categoria)})</option>`).join('')}
         </select>
       </div>
-      <div id="info-producto-ingreso" style="display:none; background:#f7fafc; padding:15px; border-radius:8px; margin-top:15px">
+      <div id="info-producto-ingreso-${timestamp}" style="display:none; background:#f7fafc; padding:15px; border-radius:8px; margin-top:15px">
         <h4>Información del Producto</h4>
-        <p><strong>Nombre:</strong> <span id="ingreso-nombre"></span></p>
-        <p><strong>Stock Actual:</strong> <span id="ingreso-stock-actual"></span></p>
-        <p><strong>Precio de Compra Actual:</strong> S/ <span id="ingreso-precio-compra-actual"></span></p>
-        <p><strong>Precio de Venta:</strong> S/ <span id="ingreso-precio-venta"></span></p>
+        <p><strong>Nombre:</strong> <span id="ingreso-nombre-${timestamp}"></span></p>
+        <p><strong>Stock Actual:</strong> <span id="ingreso-stock-actual-${timestamp}"></span></p>
+        <p><strong>Precio de Compra Actual:</strong> S/ <span id="ingreso-precio-compra-actual-${timestamp}"></span></p>
+        <p><strong>Precio de Venta:</strong> S/ <span id="ingreso-precio-venta-${timestamp}"></span></p>
       </div>
-      <div id="form-ingreso" style="display:none; margin-top:20px; padding:20px; background:#fff; border:1px solid #ddd; border-radius:8px">
+      <div id="form-ingreso-${timestamp}" style="display:none; margin-top:20px; padding:20px; background:#fff; border:1px solid #ddd; border-radius:8px">
         <h4 style="margin-bottom:15px">Registrar Ingreso</h4>
         <div class="form-group">
           <label style="display:block; margin-bottom:5px; font-weight:600">Cantidad a Ingresar</label>
-          <input type="number" id="ingreso-cantidad" min="1" value="1" style="width:100%; padding:12px; border:1px solid #ccc; border-radius:5px; font-size:1rem">
+          <input type="number" id="ingreso-cantidad-${timestamp}" value="1" style="width:100%; padding:12px; border:1px solid #ccc; border-radius:5px; font-size:1rem">
         </div>
         <div class="form-group">
           <label style="display:block; margin-bottom:5px; font-weight:600">Precio de Compra por Unidad (S/)</label>
-          <input type="number" id="ingreso-precio-compra" step="0.01" min="0" placeholder="0.00" style="width:100%; padding:12px; border:1px solid #ccc; border-radius:5px; font-size:1rem">
+          <input type="number" id="ingreso-precio-compra-${timestamp}" step="0.01" placeholder="0.00" style="width:100%; padding:12px; border:1px solid #ccc; border-radius:5px; font-size:1rem">
         </div>
-        <div id="preview-nuevo-precio" style="display:none; margin:10px 0; padding:10px; background:#e8f5e9; border-radius:5px; font-size:0.9rem">
-          <strong>📊 Precio de Compra Ponderado:</strong><br>
-          <span id="preview-formula"></span>
-        </div>
-        <button class="btn btn-success" onclick="confirmarIngreso()" style="padding:12px 24px; font-size:1rem; margin-top:10px">✅ Registrar Ingreso</button>
+        <button type="button" id="btn-confirmar-ingreso-${timestamp}" class="btn btn-success" onclick="confirmarIngreso(${timestamp})" style="padding:12px 24px; font-size:1rem; margin-top:10px">✅ Registrar Ingreso</button>
       </div>
     </div>
   `;
 }
 
-window.cargarProductoIngreso = function() {
-  const sku = document.getElementById('ingreso-producto').value;
+window.cargarProductoIngreso = function(timestamp) {
+  const select = document.getElementById('ingreso-producto-' + timestamp);
+  const sku = select ? select.value : '';
+  const infoDiv = document.getElementById('info-producto-ingreso-' + timestamp);
+  const formDiv = document.getElementById('form-ingreso-' + timestamp);
+  
   if (!sku) {
-    document.getElementById('info-producto-ingreso').style.display = 'none';
-    document.getElementById('form-ingreso').style.display = 'none';
+    if (infoDiv) infoDiv.style.display = 'none';
+    if (formDiv) formDiv.style.display = 'none';
     return;
   }
+  
   const prod = productos.find(p => p.sku === sku);
   if (!prod) return;
-  document.getElementById('info-producto-ingreso').style.display = 'block';
-  document.getElementById('ingreso-nombre').textContent = prod.nombre;
-  document.getElementById('ingreso-stock-actual').textContent = prod.stock;
-  document.getElementById('ingreso-precio-compra-actual').textContent = (prod.precioCompra || 0).toFixed(2);
-  document.getElementById('ingreso-precio-venta').textContent = (prod.precioVenta || 0).toFixed(2);
-  document.getElementById('form-ingreso').style.display = 'block';
   
-  // Limpiar campos y preview
-  document.getElementById('ingreso-cantidad').value = 1;
-  document.getElementById('ingreso-precio-compra').value = '';
-  document.getElementById('preview-nuevo-precio').style.display = 'none';
+  if (infoDiv) infoDiv.style.display = 'block';
+  const nombreSpan = document.getElementById('ingreso-nombre-' + timestamp);
+  const stockSpan = document.getElementById('ingreso-stock-actual-' + timestamp);
+  const precioCompraSpan = document.getElementById('ingreso-precio-compra-actual-' + timestamp);
+  const precioVentaSpan = document.getElementById('ingreso-precio-venta-' + timestamp);
   
-  // Agregar listeners para calcular precio ponderado en tiempo real
-  const cantidadInput = document.getElementById('ingreso-cantidad');
-  const precioInput = document.getElementById('ingreso-precio-compra');
+  if (nombreSpan) nombreSpan.textContent = prod.nombre;
+  if (stockSpan) stockSpan.textContent = prod.stock;
+  if (precioCompraSpan) precioCompraSpan.textContent = (prod.precioCompra || 0).toFixed(2);
+  if (precioVentaSpan) precioVentaSpan.textContent = (prod.precioVenta || 0).toFixed(2);
+  if (formDiv) formDiv.style.display = 'block';
   
-  const calcularPreview = () => {
-    const cantidad = parseInt(cantidadInput.value) || 0;
-    const precioNuevo = parseFloat(precioInput.value) || 0;
-    const stockActual = prod.stock;
-    const precioActual = prod.precioCompra || 0;
-    
-    const previewDiv = document.getElementById('preview-nuevo-precio');
-    const formulaSpan = document.getElementById('preview-formula');
-    
-    if (cantidad > 0 && precioNuevo > 0) {
-      const totalCantidad = stockActual + cantidad;
-      const precioPonderado = ((precioActual * stockActual) + (precioNuevo * cantidad)) / totalCantidad;
-      
-      formulaSpan.innerHTML = `(S/ ${precioActual.toFixed(2)} × ${stockActual}) + (S/ ${precioNuevo.toFixed(2)} × ${cantidad}) ÷ (${stockActual} + ${cantidad}) = <strong>S/ ${precioPonderado.toFixed(2)}</strong>`;
-      previewDiv.style.display = 'block';
-    } else {
-      previewDiv.style.display = 'none';
-    }
-  };
+  // Obtener referencias a los campos
+  const cantidadInput = document.getElementById('ingreso-cantidad-' + timestamp);
+  const precioInput = document.getElementById('ingreso-precio-compra-' + timestamp);
+  const btnConfirmar = document.getElementById('btn-confirmar-ingreso-' + timestamp);
   
-  cantidadInput.oninput = calcularPreview;
-  precioInput.oninput = calcularPreview;
+  // Limpiar y habilitar campos
+  if (cantidadInput) cantidadInput.value = 1;
+  if (precioInput) precioInput.value = '';
+  
+  const previewDiv = document.getElementById('preview-nuevo-precio-' + timestamp);
+  if (previewDiv) previewDiv.style.display = 'none';
 };
 
-window.confirmarIngreso = async function() {
-  const sku = document.getElementById('ingreso-producto').value;
-  const cantidad = parseInt(document.getElementById('ingreso-cantidad').value);
-  const precioCompra = parseFloat(document.getElementById('ingreso-precio-compra').value) || 0;
+// Sistema de notificaciones toast
+window.showToast = function(mensaje, tipo = 'success') {
+  let toast = document.getElementById('toast-notification');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast-notification';
+    toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:15px 25px;border-radius:8px;font-size:1rem;z-index:99999;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.3);color:white;font-weight:500;max-width:400px;text-align:center;';
+    document.body.appendChild(toast);
+  }
+  toast.textContent = mensaje;
+  toast.style.background = tipo === 'success' ? '#28a745' : tipo === 'error' ? '#dc3545' : '#17a2b8';
+  toast.style.display = 'block';
+  setTimeout(() => { toast.style.display = 'none'; }, 3000);
+};
+
+window.confirmarIngreso = async function(timestamp) {
+  const select = document.getElementById('ingreso-producto-' + timestamp);
+  const sku = select ? select.value : '';
+  const cantidadInput = document.getElementById('ingreso-cantidad-' + timestamp);
+  const precioInput = document.getElementById('ingreso-precio-compra-' + timestamp);
   
-  if (!sku || cantidad < 1) { alert('Seleccione un producto y cantidad válida'); return; }
-  if (precioCompra <= 0) { alert('Ingrese el precio de compra'); return; }
+  if (!cantidadInput || !precioInput) return;
+  
+  const cantidad = parseInt(cantidadInput.value) || 0;
+  const precioCompra = parseFloat(precioInput.value) || 0;
+  
+  if (!sku || cantidad < 1) { showToast('Seleccione un producto y cantidad válida', 'error'); return; }
+  if (precioCompra <= 0) { showToast('Ingrese el precio de compra', 'error'); return; }
   
   const prod = productos.find(p => p.sku === sku);
-  if (!prod) { alert('Producto no encontrado'); return; }
+  if (!prod) { showToast('Producto no encontrado', 'error'); return; }
   
   const stockAnterior = prod.stock;
   const precioCompraAnterior = prod.precioCompra || 0;
@@ -431,20 +543,36 @@ window.confirmarIngreso = async function() {
   
   // Actualizar producto
   prod.stock = stockNuevo;
-  prod.precioCompra = parseFloat(nuevoPrecioCompra.toFixed(2)); // Redondear a 2 decimales
+  prod.precioCompra = parseFloat(nuevoPrecioCompra.toFixed(2));
   
-  await ipcRenderer.invoke('save-productos', productos);
-  alert(`Ingreso registrado: +${cantidad} unidades de ${prod.nombre}\nStock: ${stockAnterior} → ${stockNuevo}\nNuevo precio de compra: S/ ${nuevoPrecioCompra.toFixed(2)}`);
-  productos = await ipcRenderer.invoke('get-productos');
+  // Guardar en backend
+  await api.saveProductos(productos);
+  
+  // Mostrar toast de éxito
+  showToast(`✅ Ingreso registrado: +${cantidad} unidades de ${prod.nombre}\nStock: ${stockAnterior} → ${stockNuevo}`, 'success');
+  
+  // Recargar datos del backend
+  const productosData = await api.getProductos();
+  productos = Array.isArray(productosData) ? productosData : [];
+  
+  // Limpiar completamente el contenido
+  const content = document.getElementById('content');
+  if (content) {
+    content.innerHTML = '';
+  }
+  
+  // Renderizar inmediatamente (sin setTimeout)
   renderView('ingresos');
 };
 
 // ================== PERSONAL ==================
 let personalBusqueda = '';
 
-async function renderPersonal(content) {
-  const personalData = await ipcRenderer.invoke('get-personal');
-  personal = (personalData && Array.isArray(personalData)) ? personalData : [];
+async function renderPersonal(content, skipReload = false) {
+  if (!skipReload) {
+    const personalData = await api.getPersonal();
+    personal = (personalData && Array.isArray(personalData)) ? personalData : [];
+  }
   
   // Filtrar según búsqueda - SOLO por código y nombre
   const personalFiltrado = personalBusqueda 
@@ -524,7 +652,8 @@ window.buscarPersonal = function(texto) {
   personalBusqueda = texto;
   const content = document.getElementById('content');
   if (content) {
-    renderPersonal(content);
+    // No recargar desde backend, usar datos en memoria
+    renderPersonal(content, true);
   }
 };
 
@@ -538,7 +667,7 @@ window.borrarTodoPersonal = async function() {
   }
   
   personal = [];
-  await ipcRenderer.invoke('save-personal', []);
+  await api.savePersonal([]);
   personalBusqueda = '';
   await renderPersonal(document.getElementById('content'));
   alert('✅ Todo el personal ha sido eliminado');
@@ -602,22 +731,28 @@ window.guardarPersonal = async function(e) {
     personal.push(persona);
   }
   
-  await ipcRenderer.invoke('save-personal', personal);
+  await api.savePersonal(personal);
   closeModal('personal');
   await renderView('personal');
   
-  document.getElementById('personal-codigo-original').value = '';
-  document.getElementById('personal-codigo').value = '';
-  document.getElementById('personal-nombres').value = '';
-  document.getElementById('personal-dni').value = '';
-  document.getElementById('personal-area').value = '';
-  document.getElementById('modal-titulo-personal').textContent = 'Nuevo Personal';
+  const el1 = document.getElementById('personal-codigo-original');
+  const el2 = document.getElementById('personal-codigo');
+  const el3 = document.getElementById('personal-nombres');
+  const el4 = document.getElementById('personal-dni');
+  const el5 = document.getElementById('personal-area');
+  const el6 = document.getElementById('modal-titulo-personal');
+  if (el1) el1.value = '';
+  if (el2) el2.value = '';
+  if (el3) el3.value = '';
+  if (el4) el4.value = '';
+  if (el5) el5.value = '';
+  if (el6) el6.textContent = 'Nuevo Personal';
 };
 
 window.eliminarPersonal = async function(codigo) {
   if (confirm('¿Eliminar este registro?')) {
     personal = personal.filter(p => p.codigo !== codigo);
-    await ipcRenderer.invoke('save-personal', personal);
+    await api.savePersonal(personal);
     await renderView('personal');
   }
 };
@@ -632,9 +767,9 @@ window.importarPersonalExcel = async function() {
     if (!file) return;
     try {
       const buffer = await file.arrayBuffer();
-      const result = await ipcRenderer.invoke('import-excel-personal', buffer);
+      const result = await api.importExcelPersonal(buffer);
       if (result.success && result.personal && result.personal.length > 0) {
-        await ipcRenderer.invoke('save-personal', result.personal);
+        await api.savePersonal(result.personal);
         personal = result.personal;
         alert(`Importados ${personal.length} trabajadores`);
         await renderView('personal');
@@ -655,7 +790,7 @@ window.exportarPersonalExcel = async function() {
     return;
   }
   try {
-    const XLSX = require('xlsx');
+    // XLSX viene del CDN — variable global disponible
     const wb = XLSX.utils.book_new();
     const datosExcel = personal.map(p => ({
       'CODIGO': p.codigo,
@@ -667,7 +802,7 @@ window.exportarPersonalExcel = async function() {
     XLSX.utils.book_append_sheet(wb, ws, 'Personal');
     const fecha = new Date().toISOString().split('T')[0];
     const wbJson = JSON.stringify(wb);
-    const filePath = await ipcRenderer.invoke('export-excel', wbJson, `personal_${fecha}.xlsx`);
+    const filePath = await api.exportExcel(wbJson, `personal_${fecha}.xlsx`);
     if (filePath.startsWith('ERROR:')) {
       alert('Error al exportar: ' + filePath);
     } else {
@@ -679,27 +814,11 @@ window.exportarPersonalExcel = async function() {
 };
 
 // ================== COMIDA ==================
-const PRECIO_COMIDA = 10;
-const TOTAL_DIAS_CAMPANA = 14;
 let comidaTrabajadorSeleccionado = null;
 
 function renderComida(content) {
-  let opcionesPersonal = '';
-  if (personal && personal.length > 0) {
-    opcionesPersonal = '<option value="">-- Seleccionar trabajador --</option>';
-    for (let i = 0; i < personal.length; i++) {
-      const p = personal[i];
-      const info = getPersonalInfo(p);
-      const selected = (comidaTrabajadorSeleccionado === p.codigo) ? 'selected' : '';
-      opcionesPersonal += `<option value="${p.codigo}" ${selected}>${info.nombre} - ${info.area}</option>`;
-    }
-  } else {
-    opcionesPersonal = '<option value="">No hay personal registrado</option>';
-  }
-  
-  // Obtener el código seleccionado (del dropdown o de la variable)
-  const codigoSeleccionado = comidaTrabajadorSeleccionado || 
-    (personal.length > 0 ? personal[0].codigo : '');
+  // Obtener el código seleccionado
+  const codigoSeleccionado = comidaTrabajadorSeleccionado || '';
   
   // Verificar si hay un trabajador seleccionado para mostrar el calendario
   const haySeleccion = codigoSeleccionado && codigoSeleccionado !== '';
@@ -711,7 +830,8 @@ function renderComida(content) {
   let headerDias = '<th style="padding:8px; text-align:center; min-width:50px; background:#f0f0f0">Tipo</th>';
   let botonesDias = '<td style="background:#f0f0f0"></td>';
   for (let d = 1; d <= TOTAL_DIAS_CAMPANA; d++) {
-    headerDias += `<th style="padding:8px; text-align:center; font-size:0.85rem; background:#f0f0f0">D${d}</th>`;
+    const fechaStr = fechaDiaCampana(d);
+    headerDias += `<th style="padding:8px; text-align:center; font-size:0.85rem; background:#f0f0f0">D${d}<br><span style="font-size:0.65rem;font-weight:normal;color:#666">${fechaStr}</span></th>`;
     botonesDias += `<td style="text-align:center; padding:3px; background:#f8f8f8">
       <button onclick="seleccionarTodoDia(${d})" style="font-size:0.65rem; padding:1px 3px; background:#28a745; color:white; border:none; border-radius:2px; cursor:pointer" title="Marcar todo">☑</button>
       <button onclick="limpiarDia(${d})" style="font-size:0.65rem; padding:1px 3px; background:#dc3545; color:white; border:none; border-radius:2px; cursor:pointer" title="Limpiar">✕</button>
@@ -726,7 +846,7 @@ function renderComida(content) {
     const totales = calcularTotalesComida(consumosActual);
     resumenHTML = `
       <div id="resumen-comida-trabajador" style="margin-top:15px; padding:15px; background:#e8f5e9; border-radius:8px">
-        <h4>📊 ${info.nombre}</h4>
+        <h4>📊 ${sanitizeHTML(info.nombre)}</h4>
         <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:10px">
           <div style="background:white; padding:10px 15px; border-radius:5px; text-align:center; min-width:80px">
             <div style="font-size:1.3rem">☕</div>
@@ -753,9 +873,9 @@ function renderComida(content) {
           </div>
         </div>
         <div style="margin-top:10px; font-size:0.9rem; color:#666">
-          <strong>${totales.total}/42</strong> comidas usadas
+          <strong>${totales.total}/${MAX_COMIDAS_POR_PERSONA}</strong> comidas usadas
           <div style="width:200px; height:8px; background:#ddd; border-radius:5px; margin-top:5px">
-            <div style="width:${Math.min((totales.total / 42) * 100, 100)}%; height:100%; background:#007bff; border-radius:5px; transition:width 0.3s"></div>
+            <div style="width:${Math.min((totales.total / MAX_COMIDAS_POR_PERSONA) * 100, 100)}%; height:100%; background:#007bff; border-radius:5px; transition:width 0.3s"></div>
           </div>
         </div>
       </div>
@@ -797,7 +917,7 @@ function renderComida(content) {
     const consumos = getConsumosParaCodigo(p.codigo);
     const totales = calcularTotalesComida(consumos);
     filasResumenGeneral += `<tr style="background:${codigoSeleccionado === p.codigo ? '#e8f5e9' : 'white'}">
-      <td style="padding:8px; border:1px solid #eee">${info.nombre}</td>
+      <td style="padding:8px; border:1px solid #eee">${sanitizeHTML(info.nombre)}</td>
       <td style="text-align:center; color:#fd7e14; font-weight:bold; border:1px solid #eee">${totales.desayunos}</td>
       <td style="text-align:center; color:#28a745; font-weight:bold; border:1px solid #eee">${totales.almuerzos}</td>
       <td style="text-align:center; color:#6f42c1; font-weight:bold; border:1px solid #eee">${totales.cenas}</td>
@@ -817,6 +937,16 @@ function renderComida(content) {
     return acc;
   }, { desayunos: 0, almuerzos: 0, cenas: 0, total: 0 });
   
+  // Calcular display name para el input si hay selección
+  let inputDisplayValue = '';
+  if (haySeleccion) {
+    const trabSel = personal.find(p => p.codigo === codigoSeleccionado);
+    if (trabSel) {
+      const info = getPersonalInfo(trabSel);
+      inputDisplayValue = codigoSeleccionado + ' - ' + info.nombre + ' (' + info.area + ')';
+    }
+  }
+  
   // Mensaje cuando no hay selección
   let mensajeNoSeleccion = '';
   if (!haySeleccion) {
@@ -827,20 +957,36 @@ function renderComida(content) {
     <div class="card">
       <h3>🍽️ Registro de Comida</h3>
       <p style="color:#666; margin-bottom:20px">Campaña de 14 días - S/ ${PRECIO_COMIDA} por comida</p>
+
+      <div style="margin-bottom:15px; padding:12px 15px; background:#fff3cd; border-radius:5px; font-size:0.9rem; display:flex; align-items:center; gap:10px; flex-wrap:wrap">
+        <strong>📅 Fecha inicial de campaña:</strong>
+        <input type="date" id="campana-fecha-inicio" value="${fechaInicioCampana}" 
+          onchange="cambiarFechaInicioCampana(this.value)"
+          style="font-size:0.9rem; padding:6px 10px; border:1px solid #ccc; border-radius:4px">
+        <span style="color:#666; font-size:0.85rem">
+          → <span id="campana-fecha-fin-texto">${fechaDiaCampana(TOTAL_DIAS_CAMPANA)}</span>
+        </span>
+        <span id="fecha-guardada-msg" style="display:none; color:#28a745; font-weight:bold">✓ Guardado</span>
+      </div>
       
-      <div class="form-group">
+      <div class="form-group" id="comida-search-group">
         <label>Seleccionar Trabajador</label>
-        <select id="comida-trabajador" onchange="cargarConsumosTrabajador()" style="width:100%; padding:12px; border:2px solid #ddd; border-radius:5px; font-size:1rem; background:white">
-          ${opcionesPersonal}
-        </select>
+        <input type="text" id="comida-trabajador-input" 
+               placeholder="Escriba código o nombre..." 
+               autocomplete="off"
+               value="${sanitizeHTML(inputDisplayValue)}"
+               style="width:100%; padding:12px; border:2px solid #ddd; border-radius:5px; font-size:1rem"
+               oninput="seleccionarTrabajadorComida(this.value)"
+               onfocus="this.select()">
+        <input type="hidden" id="comida-trabajador" value="${codigoSeleccionado}">
+        <div id="comida-resultados" style="display:none"></div>
       </div>
       
       ${mensajeNoSeleccion}
       
       <div id="seccion-calendario" style="margin-top:20px; display:${haySeleccion ? 'block' : 'none'}">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px">
-          <h4 style="margin:0">📅 Calendario de 14 días</h4>
-          <span style="font-size:0.85rem; color:#666">Click en cada celda para marcar/desmarcar</span>
+        <div style="margin-bottom:10px">
+          <h4 style="margin:0">📅 14 días: ${fechaDiaCampana(1)} → ${fechaDiaCampana(TOTAL_DIAS_CAMPANA)}</h4>
         </div>
         
         <div style="overflow-x:auto; max-width:100%">
@@ -870,7 +1016,7 @@ function renderComida(content) {
       </div>
     </div>
     
-    <div class="card">
+    <div class="card" id="resumen-general-comida-container">
       <h3>📊 Resumen General de Comida</h3>
       <div class="stats-grid" style="margin-bottom:20px">
         <div class="stat-card" style="background:#fff3cd">
@@ -955,6 +1101,7 @@ function calcularTotalesComida(dias) {
     if (d.desayuno) acc.desayunos++;
     if (d.almuerzo) acc.almuerzos++;
     if (d.cena) acc.cenas++;
+    acc.total = acc.desayunos + acc.almuerzos + acc.cenas;
     return acc;
   }, { desayunos: 0, almuerzos: 0, cenas: 0, total: 0 });
 }
@@ -995,6 +1142,7 @@ window.toggleComida = function(codigo, dia, tipo) {
   
   // También actualizar el resumen y la barra de progreso
   actualizarResumenComida(codigo);
+  actualizarResumenGeneralComida();
 };
 
 // Actualizar SOLO una celda específica (no todo el calendario)
@@ -1032,8 +1180,8 @@ function actualizarResumenComida(codigo) {
   const consumos = getConsumosParaCodigo(codigo);
   const totales = calcularTotalesComida(consumos);
   
-  resumenDiv.innerHTML = `
-    <h4>📊 ${info.nombre}</h4>
+    resumenDiv.innerHTML = `
+      <h4>📊 ${sanitizeHTML(info.nombre)}</h4>
     <div style="display:flex; gap:15px; flex-wrap:wrap; margin-top:10px">
       <div style="background:white; padding:10px 15px; border-radius:5px; text-align:center; min-width:80px">
         <div style="font-size:1.3rem">☕</div>
@@ -1060,19 +1208,99 @@ function actualizarResumenComida(codigo) {
       </div>
     </div>
     <div style="margin-top:10px; font-size:0.9rem; color:#666">
-      <strong>${totales.total}/42</strong> comidas usadas
+      <strong>${totales.total}/${MAX_COMIDAS_POR_PERSONA}</strong> comidas usadas
       <div style="width:200px; height:8px; background:#ddd; border-radius:5px; margin-top:5px">
-        <div style="width:${Math.min((totales.total / 42) * 100, 100)}%; height:100%; background:#007bff; border-radius:5px; transition:width 0.3s"></div>
+        <div style="width:${Math.min((totales.total / MAX_COMIDAS_POR_PERSONA) * 100, 100)}%; height:100%; background:#007bff; border-radius:5px; transition:width 0.3s"></div>
       </div>
     </div>
   `;
+}
+
+
+
+// Actualizar la tabla "Resumen General de Comida" completa
+function actualizarResumenGeneralComida() {
+  const container = document.getElementById('resumen-general-comida-container');
+  if (!container) return;
+
+  const selectedCode = comidaTrabajadorSeleccionado || '';
+
+  let filasResumenGeneral = '';
+  personal.forEach(p => {
+    const info = getPersonalInfo(p);
+    const consumos = getConsumosParaCodigo(p.codigo);
+    const totales = calcularTotalesComida(consumos);
+    filasResumenGeneral += '<tr style="background:' + (selectedCode === p.codigo ? '#e8f5e9' : 'white') + '">' +
+      '<td style="padding:8px; border:1px solid #eee">' + sanitizeHTML(info.nombre) + '</td>' +
+      '<td style="text-align:center; color:#fd7e14; font-weight:bold; border:1px solid #eee">' + totales.desayunos + '</td>' +
+      '<td style="text-align:center; color:#28a745; font-weight:bold; border:1px solid #eee">' + totales.almuerzos + '</td>' +
+      '<td style="text-align:center; color:#6f42c1; font-weight:bold; border:1px solid #eee">' + totales.cenas + '</td>' +
+      '<td style="text-align:center; font-weight:bold; border:1px solid #eee">' + totales.total + '</td>' +
+      '<td style="text-align:center; border:1px solid #eee">S/ ' + (totales.total * PRECIO_COMIDA).toFixed(2) + '</td>' +
+    '</tr>';
+  });
+
+  const totalesGenerales = personal.reduce((acc, p) => {
+    const consumos = getConsumosParaCodigo(p.codigo);
+    const t = calcularTotalesComida(consumos);
+    acc.desayunos += t.desayunos;
+    acc.almuerzos += t.almuerzos;
+    acc.cenas += t.cenas;
+    acc.total += t.total;
+    return acc;
+  }, { desayunos: 0, almuerzos: 0, cenas: 0, total: 0 });
+
+  container.innerHTML = 
+    '<h3>📊 Resumen General de Comida</h3>' +
+    '<div class="stats-grid" style="margin-bottom:20px">' +
+      '<div class="stat-card" style="background:#fff3cd">' +
+        '<h3 style="color:#fd7e14">☕ ' + totalesGenerales.desayunos + '</h3><p>Desayunos</p>' +
+      '</div>' +
+      '<div class="stat-card" style="background:#d4edda">' +
+        '<h3 style="color:#28a745">🍱 ' + totalesGenerales.almuerzos + '</h3><p>Almuerzos</p>' +
+      '</div>' +
+      '<div class="stat-card" style="background:#e2e3e5">' +
+        '<h3 style="color:#6f42c1">🌙 ' + totalesGenerales.cenas + '</h3><p>Cenas</p>' +
+      '</div>' +
+      '<div class="stat-card">' +
+        '<h3>' + totalesGenerales.total + '</h3><p>Total Comidas</p>' +
+      '</div>' +
+      '<div class="stat-card" style="background:#007bff; color:white">' +
+        '<h3>S/ ' + (totalesGenerales.total * PRECIO_COMIDA).toFixed(2) + '</h3><p>Total Cobrar</p>' +
+      '</div>' +
+    '</div>' +
+    '<table style="font-size:0.9rem">' +
+      '<thead>' +
+        '<tr style="background:var(--primary); color:white">' +
+          '<th style="padding:10px; text-align:left">Trabajador</th>' +
+          '<th style="padding:10px; text-align:center">☕ Desayuno</th>' +
+          '<th style="padding:10px; text-align:center">🍱 Almuerzo</th>' +
+          '<th style="padding:10px; text-align:center">🌙 Cena</th>' +
+          '<th style="padding:10px; text-align:center">Total</th>' +
+          '<th style="padding:10px; text-align:center">Monto</th>' +
+        '</tr>' +
+      '</thead>' +
+      '<tbody>' +
+        (filasResumenGeneral || '<tr><td colspan="6" style="text-align:center; padding:20px">No hay personal registrado</td></tr>') +
+      '</tbody>' +
+      '<tfoot>' +
+        '<tr style="background:#e9ecef; font-weight:bold">' +
+          '<td style="padding:10px">TOTAL</td>' +
+          '<td style="text-align:center; color:#fd7e14">' + totalesGenerales.desayunos + '</td>' +
+          '<td style="text-align:center; color:#28a745">' + totalesGenerales.almuerzos + '</td>' +
+          '<td style="text-align:center; color:#6f42c1">' + totalesGenerales.cenas + '</td>' +
+          '<td style="text-align:center">' + totalesGenerales.total + '</td>' +
+          '<td style="text-align:center">S/ ' + (totalesGenerales.total * PRECIO_COMIDA).toFixed(2) + '</td>' +
+        '</tr>' +
+      '</tfoot>' +
+    '</table>';
 }
 
 // Seleccionar todo un día (3 comidas)
 window.seleccionarTodoDia = function(dia) {
   const codigo = document.getElementById('comida-trabajador').value;
   if (!codigo) {
-    alert('Seleccione un trabajador primero');
+    showToast('Seleccione un trabajador primero', 'error');
     return;
   }
   
@@ -1110,6 +1338,7 @@ window.seleccionarTodoDia = function(dia) {
   
   // Actualizar resumen
   actualizarResumenComida(codigo);
+  actualizarResumenGeneralComida();
 };
 
 // Limpiar un día (quitar las 3 comidas)
@@ -1134,29 +1363,263 @@ window.limpiarDia = function(dia) {
   
   // Actualizar resumen
   actualizarResumenComida(codigo);
+  actualizarResumenGeneralComida();
 };
 
-// Cargar consumos al cambiar trabajador
-window.cargarConsumosTrabajador = function() {
-  const codigo = document.getElementById('comida-trabajador').value;
+// Filtrar y mostrar dropdown con trabajadores
+window.seleccionarTrabajadorComida = function(valor) {
+  const texto = valor.trim();
+  const contenedor = document.getElementById('comida-resultados');
+  if (!contenedor) return;
+  
+  // Ignorar si el valor es el formateado del trabajador actual (evita filtrar basura)
+  if (comidaTrabajadorSeleccionado && texto.includes(' - ')) {
+    const codigoParte = texto.split(' - ')[0] || '';
+    if (codigoParte === comidaTrabajadorSeleccionado) { return; }
+  }
+  
+  if (texto.length === 0) {
+    contenedor.style.display = 'none';
+    return;
+  }
+  
+  // Filtrar personal por código o nombre (case-insensitive)
+  const termino = texto.toLowerCase();
+  const resultados = [];
+  for (let i = 0; i < personal.length; i++) {
+    const p = personal[i];
+    const codigo = (p.codigo || '').toLowerCase();
+    const nombre = (p.apellidosNombres || p.nombre || '').toLowerCase();
+    if (codigo.includes(termino) || nombre.includes(termino)) {
+      resultados.push(p);
+    }
+  }
+  
+  if (resultados.length === 0) {
+    contenedor.innerHTML = '<div class="dropdown-empty">Sin resultados</div>';
+    contenedor.style.display = 'block';
+    return;
+  }
+  
+  // Construir items de resultados
+  let html = '';
+  for (let i = 0; i < resultados.length; i++) {
+    const p = resultados[i];
+    const info = getPersonalInfo(p);
+    const selected = p.codigo === comidaTrabajadorSeleccionado ? ' selected' : '';
+    html += `<div class="resultado-item${selected}" onclick="seleccionarDropdownComida('${sanitizeHTML(p.codigo)}')">
+      <strong>${sanitizeHTML(p.codigo)}</strong>
+      <span class="resultado-nombre">${sanitizeHTML(info.nombre)}</span>
+      <span class="resultado-area">${sanitizeHTML(info.area)}</span>
+    </div>`;
+  }
+  
+  contenedor.innerHTML = html;
+  contenedor.style.display = 'block';
+};
+
+// Renderizar SOLO el calendario y resumen de un trabajador (sin destruir el input/resultados)
+function renderCalendarioComida(codigo) {
+  try {
+    const seccion = document.getElementById('seccion-calendario');
+    if (!seccion) return;
+    if (!codigo) { seccion.style.display = 'none'; return; }
+    
+    const consumosActual = getConsumosParaCodigo(codigo);
+    const trab = personal.find(p => p.codigo === codigo);
+    const info = trab ? getPersonalInfo(trab) : { nombre: '-', area: '-' };
+    const totales = calcularTotalesComida(consumosActual);
+  
+  // Headers de días
+  let headerDias = '<th style="padding:8px;text-align:center;min-width:50px;background:#f0f0f0">Tipo</th>';
+  let botonesDias = '<td style="background:#f0f0f0"></td>';
+  for (let d = 1; d <= TOTAL_DIAS_CAMPANA; d++) {
+    const fechaStr = fechaDiaCampana(d);
+    headerDias += `<th style="padding:8px;text-align:center;font-size:0.85rem;background:#f0f0f0">D${d}<br><span style="font-size:0.65rem;font-weight:normal;color:#666">${fechaStr}</span></th>`;
+    botonesDias += `<td style="text-align:center;padding:3px;background:#f8f8f8">
+      <button onclick="seleccionarTodoDia(${d})" style="font-size:0.65rem;padding:1px 3px;background:#28a745;color:white;border:none;border-radius:2px;cursor:pointer" title="Marcar todo">☑</button>
+      <button onclick="limpiarDia(${d})" style="font-size:0.65rem;padding:1px 3px;background:#dc3545;color:white;border:none;border-radius:2px;cursor:pointer" title="Limpiar">✕</button>
+    </td>`;
+  }
+  
+  // Filas de desayuno/almuerzo/cena
+  const tiposComida = [
+    { key: 'desayuno', icono: '☕', label: 'Desayuno', color: '#fd7e14' },
+    { key: 'almuerzo', icono: '🍱', label: 'Almuerzo', color: '#28a745' },
+    { key: 'cena', icono: '🌙', label: 'Cena', color: '#6f42c1' }
+  ];
+  
+  let filasTabla = '';
+  for (let t = 0; t < tiposComida.length; t++) {
+    const tipo = tiposComida[t];
+    filasTabla += `<tr>
+      <td style="padding:10px;font-weight:bold;color:${tipo.color};background:#fafafa;border:1px solid #ddd">${tipo.icono} ${tipo.label}</td>`;
+    for (let d = 1; d <= TOTAL_DIAS_CAMPANA; d++) {
+      const marcada = consumosActual.some(c => c.dia === d && c[tipo.key]);
+      filasTabla += `<td style="text-align:center;padding:4px;background:white;border:1px solid #eee">
+        <div id="celda-${codigo}-${d}-${tipo.key}" onclick="toggleComida('${codigo}',${d},'${tipo.key}')" 
+          style="width:30px;height:30px;border-radius:5px;cursor:pointer;margin:0 auto;
+          background:${marcada ? tipo.color : '#f0f0f0'};
+          color:${marcada ? 'white' : '#ccc'};
+          display:flex;align-items:center;justify-content:center;
+          font-size:1rem;transition:all 0.2s;border:1px solid ${marcada ? tipo.color : '#ddd'}"
+          title="Día ${d} - ${tipo.label}">
+          ${marcada ? '✓' : ''}
+        </div>
+      </td>`;
+    }
+    filasTabla += '</tr>';
+  }
+  
+  // Resumen del trabajador
+  const resumenHTML = `
+    <div id="resumen-comida-trabajador" style="margin-top:15px;padding:15px;background:#e8f5e9;border-radius:8px">
+      <h4>📊 ${sanitizeHTML(info.nombre)}</h4>
+      <div style="display:flex;gap:15px;flex-wrap:wrap;margin-top:10px">
+        <div style="background:white;padding:10px 15px;border-radius:5px;text-align:center;min-width:80px">
+          <div style="font-size:1.3rem">☕</div>
+          <div style="font-size:0.8rem;color:#666">Desayunos</div>
+          <div style="font-size:1.2rem;font-weight:bold;color:#fd7e14">${totales.desayunos}</div>
+          <div style="color:#666;font-size:0.8rem">S/ ${totales.desayunos * PRECIO_COMIDA}</div>
+        </div>
+        <div style="background:white;padding:10px 15px;border-radius:5px;text-align:center;min-width:80px">
+          <div style="font-size:1.3rem">🍱</div>
+          <div style="font-size:0.8rem;color:#666">Almuerzos</div>
+          <div style="font-size:1.2rem;font-weight:bold;color:#28a745">${totales.almuerzos}</div>
+          <div style="color:#666;font-size:0.8rem">S/ ${totales.almuerzos * PRECIO_COMIDA}</div>
+        </div>
+        <div style="background:white;padding:10px 15px;border-radius:5px;text-align:center;min-width:80px">
+          <div style="font-size:1.3rem">🌙</div>
+          <div style="font-size:0.8rem;color:#666">Cenas</div>
+          <div style="font-size:1.2rem;font-weight:bold;color:#6f42c1">${totales.cenas}</div>
+          <div style="color:#666;font-size:0.8rem">S/ ${totales.cenas * PRECIO_COMIDA}</div>
+        </div>
+        <div style="background:#007bff;color:white;padding:10px 15px;border-radius:5px;text-align:center;min-width:80px">
+          <div style="font-size:0.8rem">Total</div>
+          <div style="font-size:1.3rem;font-weight:bold">${totales.total}</div>
+          <div style="font-size:0.8rem">S/ ${totales.total * PRECIO_COMIDA}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;font-size:0.9rem;color:#666">
+        <strong>${totales.total}/${MAX_COMIDAS_POR_PERSONA}</strong> comidas usadas
+        <div style="width:200px;height:8px;background:#ddd;border-radius:5px;margin-top:5px">
+          <div style="width:${Math.min((totales.total / MAX_COMIDAS_POR_PERSONA) * 100, 100)}%;height:100%;background:#007bff;border-radius:5px;transition:width 0.3s"></div>
+        </div>
+      </div>
+    </div>`;
+  
+  seccion.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <h4 style="margin:0">📅 Calendario de 14 días</h4>
+      <span style="font-size:0.85rem;color:#666">Click en cada celda para marcar/desmarcar</span>
+    </div>
+    <div style="overflow-x:auto;max-width:100%">
+      <table style="border-collapse:collapse;min-width:600px;font-size:0.9rem;border:1px solid #ccc">
+        <thead>
+          <tr style="background:#f0f0f0">${headerDias}</tr>
+          <tr style="background:#f8f8f8;font-size:0.75rem">${botonesDias}</tr>
+        </thead>
+        <tbody>${filasTabla}</tbody>
+      </table>
+    </div>
+    ${resumenHTML}
+    <div style="margin-top:15px;display:flex;gap:10px;flex-wrap:wrap">
+      <button onclick="guardarConsumosComida()" class="btn btn-primary" style="padding:12px 24px;font-size:1rem">💾 Guardar Cambios</button>
+      <span id="estado-guardado" style="color:#28a745;font-size:0.9rem;display:none;align-self:center">✓ Guardado</span>
+    </div>`;
+  
+    seccion.style.display = 'block';
+  } catch (err) {
+    console.error('[CALENDARIO] Error al renderizar:', err);
+    const seccion = document.getElementById('seccion-calendario');
+    if (seccion) {
+      seccion.innerHTML = '<div style="padding:20px;text-align:center;color:#dc3545">Error al cargar calendario</div>';
+      seccion.style.display = 'block';
+    }
+  }
+}
+
+// Seleccionar un trabajador desde el dropdown (click)
+window.seleccionarDropdownComida = function(codigo) {
+  const trabajador = personal.find(p => p.codigo === codigo);
+  if (!trabajador) return;
+  
   comidaTrabajadorSeleccionado = codigo;
   
+  const hiddenInput = document.getElementById('comida-trabajador');
+  if (hiddenInput) hiddenInput.value = codigo;
+  
+  const inputVisible = document.getElementById('comida-trabajador-input');
+  if (inputVisible) {
+    const info = getPersonalInfo(trabajador);
+    inputVisible.value = codigo + ' - ' + info.nombre + ' (' + info.area + ')';
+  }
+  
+  const resultados = document.getElementById('comida-resultados');
+  if (resultados) resultados.style.display = 'none';
+  
+  // Renderizar SOLO el calendario, sin destruir input/resultados
+  renderCalendarioComida(codigo);
+};
+
+// Mantener compatibilidad con el old onchange
+window.cargarConsumosTrabajador = function() {
+  const codigo = document.getElementById('comida-trabajador')?.value || 
+                 comidaTrabajadorSeleccionado;
   if (codigo) {
-    // Mostrar calendario y guardar selección
+    comidaTrabajadorSeleccionado = codigo;
     const seccionCalendario = document.getElementById('seccion-calendario');
     if (seccionCalendario) {
       seccionCalendario.style.display = 'block';
     }
-    // Renderizar el calendario para el trabajador seleccionado
     renderView('comida');
   }
 };
 
 // Guardar consumos de comida
+window.cambiarFechaInicioCampana = async function(fecha) {
+  if (!fecha) return;
+  const anterior = fechaInicioCampana;
+  fechaInicioCampana = fecha;
+  try {
+    await api.saveFechaInicioCampana(fecha);
+
+    // Actualizar fecha fin en el banner superior
+    const finTexto = document.getElementById('campana-fecha-fin-texto');
+    if (finTexto) finTexto.textContent = fechaDiaCampana(TOTAL_DIAS_CAMPANA);
+
+    // Actualizar heading "📅 14 días: 11/05 → 24/05"
+    const heading = document.querySelector('#seccion-calendario h4');
+    if (heading) {
+      heading.textContent = `📅 14 días: ${fechaDiaCampana(1)} → ${fechaDiaCampana(TOTAL_DIAS_CAMPANA)}`;
+    }
+
+    // Actualizar los spans de fecha en los 14 headers del calendario
+    const ths = document.querySelectorAll('#seccion-calendario thead tr:first-child th');
+    // El primer th es "Tipo", los siguientes 14 son D1-D14
+    for (let i = 1; i < ths.length; i++) {
+      const span = ths[i].querySelector('span');
+      if (span) {
+        span.textContent = fechaDiaCampana(i);
+      }
+    }
+
+    showToast('✅ Fecha de inicio actualizada', 'success');
+  } catch(e) {
+    fechaInicioCampana = anterior; // Revertir en caso de error
+    showToast('❌ Error al guardar fecha: ' + e.message, 'error');
+  }
+};
+
 window.guardarConsumosComida = async function() {
-  await ipcRenderer.invoke('save-consumos-comida', consumosComida);
-  alert('✅ Cambios guardados correctamente');
-  renderView('comida');
+  try {
+    await api.saveConsumosComida(consumosComida);
+    showToast('✅ Comidas guardadas correctamente', 'success');
+    actualizarResumenGeneralComida();
+  } catch (err) {
+    console.error('[GUARDAR] Error:', err);
+    showToast('❌ Error al guardar: ' + err.message, 'error');
+  }
 };
 
 // ================== VENTAS ==================
@@ -1170,7 +1633,7 @@ function renderVentas(content) {
     for (let i = 0; i < personal.length; i++) {
       const p = personal[i];
       const info = getPersonalInfo(p);
-      opcionesPersonal += '<option value="' + p.codigo + '">' + p.codigo + ' - ' + info.nombre + ' - ' + info.area + '</option>';
+      opcionesPersonal += '<option value="' + sanitizeHTML(p.codigo) + '">' + sanitizeHTML(p.codigo) + ' - ' + sanitizeHTML(info.nombre) + ' - ' + sanitizeHTML(info.area) + '</option>';
     }
   } else {
     opcionesPersonal = '<option value="">No hay personal cargado</option>';
@@ -1193,8 +1656,8 @@ function renderVentas(content) {
         <h4>Productos</h4>
         <div class="productos-grid">
           ${productos.filter(p => p.stock > 0).map(p => `
-            <div class="producto-card" data-sku="${p.sku}" onclick="seleccionarProductoVenta('${p.sku}')">
-              <h4>${p.nombre}</h4>
+            <div class="producto-card" data-sku="${sanitizeHTML(p.sku)}" onclick="seleccionarProductoVenta('${sanitizeHTML(p.sku)}')">
+              <h4>${sanitizeHTML(p.nombre)}</h4>
               <p>Stock: ${p.stock}</p>
               <p>S/ ${(p.precioVenta || 0).toFixed(2)}</p>
             </div>
@@ -1211,7 +1674,7 @@ function renderVentas(content) {
       <table>
         <thead><tr><th>Fecha</th><th>Trabajador</th><th>Total</th></tr></thead>
         <tbody>
-          ${ventas.slice().reverse().map(v => `<tr><td>${v.fecha}</td><td>${v.clienteNombre}</td><td>S/ ${v.total.toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="3">No hay ventas</td></tr>'}
+          ${ventas.slice().reverse().map(v => `<tr><td>${sanitizeHTML(v.fecha)}</td><td>${sanitizeHTML(v.clienteNombre)}</td><td>S/ ${v.total.toFixed(2)}</td></tr>`).join('') || '<tr><td colspan="3">No hay ventas</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -1272,38 +1735,54 @@ window.actualizarResumenVenta = function() {
     const subtotal = p.cantidad * precioVenta;
     total += subtotal;
     html += `<tr>
-      <td>${prod ? prod.nombre : p.sku}</td>
+      <td>${prod ? sanitizeHTML(prod.nombre) : sanitizeHTML(p.sku)}</td>
       <td>
         <input type="number" min="1" max="${prod ? prod.stock : 999}" value="${p.cantidad}" 
-          onchange="cambiarCantidadVenta(${index}, this.value)" 
+          onblur="cambiarCantidadVenta(${index}, this)" 
           style="width:60px; padding:5px; border:1px solid #ddd; border-radius:4px; text-align:center">
       </td>
       <td>S/ ${precioVenta.toFixed(2)}</td>
-      <td><strong>S/ ${subtotal.toFixed(2)}</strong></td>
-      <td><button onclick="quitarProductoVenta(${index})" style="background:#dc3545; color:white; border:none; padding:5px 8px; border-radius:4px; cursor:pointer">✕</button></td>
+      <td><strong class="subtotal-${index}">S/ ${subtotal.toFixed(2)}</strong></td>
+      <td><button onclick="quitarProductoVenta(${index})" class="btn btn-danger btn-sm" style="padding:6px 14px">🗑 Eliminar</button></td>
     </tr>`;
   });
-  html += `<tr><td colspan="3"><strong>TOTAL</strong></td><td colspan="2"><strong style="font-size:1.2rem">S/ ${total.toFixed(2)}</strong></td></tr></tbody></table>`;
+  html += `<tr><td colspan="3"><strong>TOTAL</strong></td><td colspan="2"><strong id="venta-total" style="font-size:1.2rem">S/ ${total.toFixed(2)}</strong></td></tr></tbody></table>`;
   container.innerHTML = html;
   btnConfirmar.disabled = false;
 };
 
 // Cambiar cantidad desde el input
-window.cambiarCantidadVenta = function(index, nuevaCantidad) {
-  const cant = parseInt(nuevaCantidad);
+window.cambiarCantidadVenta = function(index, inputEl) {
+  const cant = parseInt(inputEl.value);
   if (isNaN(cant) || cant < 1) {
-    alert('Cantidad inválida');
-    actualizarResumenVenta();
+    showToast('Cantidad inválida', 'error');
+    inputEl.value = productosVentaSeleccionados[index].cantidad;
+    inputEl.focus();
     return;
   }
   const prod = productos.find(p => p.sku === productosVentaSeleccionados[index].sku);
   if (prod && cant > prod.stock) {
-    alert('No hay suficiente stock. Disponible: ' + prod.stock);
-    actualizarResumenVenta();
+    showToast('No hay suficiente stock. Disponible: ' + prod.stock, 'error');
+    inputEl.value = productosVentaSeleccionados[index].cantidad;
+    inputEl.focus();
     return;
   }
   productosVentaSeleccionados[index].cantidad = cant;
-  actualizarResumenVenta();
+
+  // Actualizar subtotal inline sin regenerar todo el DOM
+  const precioVenta = prod ? (prod.precioVenta || 0) : 0;
+  const subtotal = cant * precioVenta;
+  const subtotalEl = document.querySelector('.subtotal-' + index);
+  if (subtotalEl) subtotalEl.textContent = 'S/ ' + subtotal.toFixed(2);
+
+  // Recalcular total general
+  let total = 0;
+  productosVentaSeleccionados.forEach(p => {
+    const pr = productos.find(pr => pr.sku === p.sku);
+    total += p.cantidad * (pr ? (pr.precioVenta || 0) : 0);
+  });
+  const totalEl = document.getElementById('venta-total');
+  if (totalEl) totalEl.textContent = 'S/ ' + total.toFixed(2);
 };
 
 // Quitar producto de la venta
@@ -1324,7 +1803,7 @@ window.confirmarVenta = async function() {
   });
   const venta = { id: Date.now(), fecha: new Date().toLocaleDateString('es'), clienteCodigo: personalVentaSeleccionado, clienteNombre: trab.apellidosNombres, items: items, total: total };
   ventas.push(venta);
-  await ipcRenderer.invoke('save-ventas', ventas);
+  await api.saveVentas(ventas);
   productosVentaSeleccionados = [];
   personalVentaSeleccionado = null;
   renderView('ventas');
@@ -1356,10 +1835,6 @@ function renderDeudas(content) {
           <h3 style="color:#fd7e14">S/ ${totalComida.toFixed(2)}</h3>
           <p>Total Comida</p>
         </div>
-        <div class="stat-card" style="background:#d4edda">
-          <h3 style="color:#28a745">S/ ${totalPagos.toFixed(2)}</h3>
-          <p>Total Pagos</p>
-        </div>
         <div class="stat-card" style="background:#dc3545; color:white">
           <h3>S/ ${calcularDeudaTotal().toFixed(2)}</h3>
           <p>Deuda Total</p>
@@ -1372,9 +1847,7 @@ function renderDeudas(content) {
             <th style="padding:10px; text-align:left">Nombre</th>
             <th style="padding:10px; text-align:center">Compras</th>
             <th style="padding:10px; text-align:center">Comida</th>
-            <th style="padding:10px; text-align:center">Pagos</th>
             <th style="padding:10px; text-align:center">Deuda Total</th>
-            <th style="padding:10px; text-align:center">Acción</th>
           </tr>
         </thead>
         <tbody>
@@ -1382,18 +1855,16 @@ function renderDeudas(content) {
             const info = getPersonalInfo(p);
             const detalle = getDetalleDeuda(p.codigo);
             return `
-            <tr>
-              <td style="padding:10px">
-                <strong>${info.nombre}</strong><br>
-                <span style="color:#666; font-size:0.85rem">${info.area}</span>
-              </td>
+              <tr>
+                <td style="padding:10px">
+                  <strong>${sanitizeHTML(info.nombre)}</strong><br>
+                  <span style="color:#666; font-size:0.85rem">${sanitizeHTML(info.area)}</span>
+                </td>
               <td style="text-align:center">S/ ${detalle.compras.toFixed(2)}</td>
               <td style="text-align:center; color:#fd7e14">S/ ${detalle.comida.toFixed(2)}</td>
-              <td style="text-align:center; color:#28a745">S/ ${detalle.pagos.toFixed(2)}</td>
               <td style="text-align:center; font-weight:bold; color:#dc3545">S/ ${detalle.total.toFixed(2)}</td>
-              <td style="text-align:center"><button class="btn btn-success" onclick="registrarPago('${p.codigo}')">💵 Pagar</button></td>
             </tr>
-          `; }).join('') || '<tr><td colspan="6" style="text-align:center; padding:20px">No hay deudas</td></tr>'}
+          `; }).join('') || '<tr><td colspan="4" style="text-align:center; padding:20px">No hay deudas</td></tr>'}
         </tbody>
       </table>
     </div>
@@ -1405,7 +1876,7 @@ window.registrarPago = function(codigo) {
   const detalle = getDetalleDeuda(codigo);
   document.getElementById('pago-personal-codigo').value = codigo;
   document.getElementById('form-pago').childNodes[0].innerHTML = `
-    <strong>Trabajador:</strong> ${trab.apellidosNombres}<br>
+    <strong>Trabajador:</strong> ${sanitizeHTML(trab.apellidosNombres)}<br>
     <span style="font-size:0.9rem; color:#666">
       Compras: S/ ${detalle.compras.toFixed(2)} | 
       Comida: S/ ${detalle.comida.toFixed(2)} | 
@@ -1421,7 +1892,7 @@ window.guardarPago = async function(e) {
   const form = e.target;
   const pago = { id: Date.now(), fecha: new Date().toLocaleDateString('es'), clienteCodigo: form.codigo.value, monto: parseFloat(form.monto.value) };
   pagos.push(pago);
-  await ipcRenderer.invoke('save-pagos', pagos);
+  await api.savePagos(pagos);
   closeModal('pago');
   renderView('deudas');
   alert('Pago registrado');
@@ -1450,7 +1921,6 @@ function renderReportes(content) {
       <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:10px">
         <h3>📈 Reportes Detallados por Colaborador</h3>
         <div style="display:flex; gap:10px">
-          <button class="btn btn-primary" onclick="exportarReporteExcel()">📥 Exportar Reporte a Excel</button>
           <button class="btn btn-danger" onclick="mostrarConfirmacionCierreCampana()" style="padding:10px 20px; font-size:0.95rem">🚫 Cerrar Campaña</button>
         </div>
       </div>
@@ -1511,12 +1981,12 @@ function renderReportes(content) {
           
           return `
             <div style="border:1px solid #ddd; border-radius:8px; margin-bottom:15px; overflow:hidden">
-              <div style="background:${deuda > 0 ? '#fef3c7' : '#e8f5e9'}; padding:15px; display:flex; justify-content:space-between; align-items:center; cursor:pointer" onclick="toggleDetalleReporte('${p.codigo}')">
-                <div>
-                  <strong style="font-size:1.1rem">${info.nombre}</strong>
-                  <span style="margin-left:15px; color:#666">${info.area}</span>
-                  <span style="margin-left:15px; font-size:0.85rem; color:#888">Cód: ${p.codigo}</span>
-                </div>
+                <div style="background:${deuda > 0 ? '#fef3c7' : '#e8f5e9'}; padding:15px; display:flex; justify-content:space-between; align-items:center; cursor:pointer" onclick="toggleDetalleReporte('${sanitizeHTML(p.codigo)}')">
+                  <div>
+                    <strong style="font-size:1.1rem">${sanitizeHTML(info.nombre)}</strong>
+                    <span style="margin-left:15px; color:#666">${sanitizeHTML(info.area)}</span>
+                    <span style="margin-left:15px; font-size:0.85rem; color:#888">Cód: ${sanitizeHTML(p.codigo)}</span>
+                  </div>
                 <div style="text-align:right">
                   <div style="font-size:0.9rem; color:#666">Compras: <strong>S/ ${totalCompras.toFixed(2)}</strong> | Pagos: <strong style="color:green">S/ ${totalPagosPersona.toFixed(2)}</strong></div>
                   <div style="font-size:1rem; margin-top:5px">
@@ -1529,8 +1999,8 @@ function renderReportes(content) {
                 </div>
               </div>
               
-              <!-- Detalle expandable -->
-              <div id="detalle-reporte-${p.codigo}" style="display:none; padding:15px; background:#fafafa">
+                <!-- Detalle expandable -->
+                <div id="detalle-reporte-${sanitizeHTML(p.codigo)}" style="display:none; padding:15px; background:#fafafa">
                 <h5 style="margin-bottom:10px; border-bottom:1px solid #ddd; padding-bottom:5px">Detalle de Transacciones</h5>
                 
                 <!-- Compras -->
@@ -1551,13 +2021,13 @@ function renderReportes(content) {
                         if (v.items && v.items.length > 0) {
                           productosDetalle = v.items.map(i => {
                             const prod = productos.find(pr => pr.sku === i.sku);
-                            return prod ? `${i.cantidad}x ${prod.nombre}` : i.sku;
+                            return prod ? `${i.cantidad}x ${sanitizeHTML(prod.nombre)}` : sanitizeHTML(i.sku);
                           }).join(', ');
                         } else if (v.descripcion) {
                           productosDetalle = v.descripcion;
                         }
                         return `<tr>
-                          <td style="padding:5px; border:1px solid #ddd">${v.fecha}</td>
+                          <td style="padding:5px; border:1px solid #ddd">${sanitizeHTML(v.fecha)}</td>
                           <td style="padding:5px; border:1px solid #ddd">${productosDetalle}</td>
                           <td style="padding:5px; border:1px solid #ddd; text-align:right">S/ ${v.total.toFixed(2)}</td>
                         </tr>`;
@@ -1579,7 +2049,7 @@ function renderReportes(content) {
                     </thead>
                     <tbody>
                       ${misPagos.map(pa => `<tr>
-                        <td style="padding:5px; border:1px solid #ddd">${pa.fecha}</td>
+                        <td style="padding:5px; border:1px solid #ddd">${sanitizeHTML(pa.fecha)}</td>
                         <td style="padding:5px; border:1px solid #ddd; text-align:right; color:green">S/ ${pa.monto.toFixed(2)}</td>
                       </tr>`).join('')}
                     </tbody>
@@ -1637,7 +2107,7 @@ window.exportarReporteExcel = async function() {
     return;
   }
   try {
-    const XLSX = require('xlsx');
+    // XLSX viene del CDN — variable global disponible
     const wb = XLSX.utils.book_new();
     
     // hoja 1: Resumen por colaborador
@@ -1710,8 +2180,14 @@ window.exportarReporteExcel = async function() {
       const misConsumos = getConsumosParaCodigo(p.codigo);
       const info = getPersonalInfo(p);
       misConsumos.forEach(dia => {
+        const fechaComida = fechaInicioCampana ? (() => {
+          const d = new Date(fechaInicioCampana + 'T12:00:00');
+          d.setDate(d.getDate() + (dia.dia - 1));
+          return d.toISOString().split('T')[0];
+        })() : '';
         if (dia.desayuno) {
           comidaData.push({
+            'FECHA': fechaComida,
             'CODIGO': p.codigo,
             'COLABORADOR': info.nombre,
             'AREA': info.area,
@@ -1722,6 +2198,7 @@ window.exportarReporteExcel = async function() {
         }
         if (dia.almuerzo) {
           comidaData.push({
+            'FECHA': fechaComida,
             'CODIGO': p.codigo,
             'COLABORADOR': info.nombre,
             'AREA': info.area,
@@ -1732,6 +2209,7 @@ window.exportarReporteExcel = async function() {
         }
         if (dia.cena) {
           comidaData.push({
+            'FECHA': fechaComida,
             'CODIGO': p.codigo,
             'COLABORADOR': info.nombre,
             'AREA': info.area,
@@ -1748,7 +2226,7 @@ window.exportarReporteExcel = async function() {
     // Exportar
     const fecha = new Date().toISOString().split('T')[0];
     const wbJson = JSON.stringify(wb);
-    const filePath = await ipcRenderer.invoke('export-excel', wbJson, `reporte_colaboradores_${fecha}.xlsx`);
+    const filePath = await api.exportExcel(wbJson, `campana_${numeroCampanaActual}_${fecha}.xlsx`);
     if (filePath.startsWith('ERROR:')) {
       alert('Error al exportar: ' + filePath);
     } else {
@@ -1761,22 +2239,41 @@ window.exportarReporteExcel = async function() {
 
 // ================== CIERRE DE CAMPAÑA ==================
 window.mostrarConfirmacionCierreCampana = function() {
-  // Primera confirmación
-  if (!confirm('⚠️ ¿Está seguro de que desea CERRAR la campaña?\n\nSe exportarán todos los datos a archivos y se resetearán las secciones de Comida, Ventas, Deudas y Reportes.\n\n¿Desea continuar?')) {
+  // Mostrar modal para elegir número de campaña
+  const input = document.getElementById('campana-numero-input');
+  if (input) input.value = numeroCampanaActual;
+  openModal('campana');
+};
+
+window.confirmarCierreConCampana = function() {
+  const input = document.getElementById('campana-numero-input');
+  if (!input) return;
+
+  const n = parseInt(input.value);
+  if (isNaN(n) || n < 1) {
+    showToast('❌ Ingrese un número de campaña válido (mayor o igual a 1)', 'error');
     return;
   }
-  
-  // Segunda confirmación
+  numeroCampanaActual = n;
+  closeModal('campana');
+
+  // Actualizar badge en sidebar
+  const badge = document.getElementById('campana-numero');
+  if (badge) badge.textContent = numeroCampanaActual;
+
+  // Segunda confirmación (ahora es la única)
   if (!confirm('🚫 ÚLTIMA ADVERTENCIA 🚫\n\nEsta acción NO se puede deshacer.\n\nTodos los datos de:\n- Comida\n- Ventas\n- Pagos (Deudas)\n\nserán eliminados y guardados en archivos de respaldo.\n\n¿CONFIRMA el cierre de campaña?')) {
     return;
   }
-  
+
   // Ejecutar cierre
   ejecutarCierreCampana();
 };
 
 window.ejecutarCierreCampana = async function() {
   try {
+    console.log('=== INICIANDO CIERRE DE CAMPAÑA ===');
+    
     // Mostrar loading
     const confirmBtn = document.querySelector('button[onclick="mostrarConfirmacionCierreCampana()"]');
     if (confirmBtn) {
@@ -1784,37 +2281,71 @@ window.ejecutarCierreCampana = async function() {
       confirmBtn.textContent = '⏳ Procesando...';
     }
     
+    console.log('Llamando api.cerrarCampana...');
+    console.log('personal:', personal.length);
+    console.log('ventas:', ventas.length);
+    console.log('consumosComida:', consumosComida.length);
+    
     // Llamar al backend para exportar y resetear
-    const resultado = await ipcRenderer.invoke('cerrar-campana', {
+    const resultado = await api.cerrarCampana({
       personal: personal,
       ventas: ventas,
-      pagos: pagos,
       consumosComida: consumosComida,
       productos: productos,
       precioComida: PRECIO_COMIDA,
-      totalDiasCampana: TOTAL_DIAS_CAMPANA
+      numeroCampana: numeroCampanaActual,
+      fechaInicioCampana: fechaInicioCampana
     });
     
+    console.log('Resultado recibido:', resultado);
+    console.log('Tipo de resultado:', typeof resultado);
+    
+    // Validar que resultado no sea undefined o null
+    if (!resultado) {
+      console.error('Resultado es undefined o null');
+      showToast('❌ Error: El servidor no respondió correctamente', 'error');
+      return;
+    }
+    
     if (resultado.success) {
+      console.log('Cierre exitoso, reseteando datos...');
+
       // Resetear datos en memoria
       ventas = [];
-      pagos = [];
       consumosComida = [];
-      
+      pagos = [];
+      comidaTrabajadorSeleccionado = null;
+
+      // Incrementar número de campaña
+      numeroCampanaActual++;
+      const badge = document.getElementById('campana-numero');
+      if (badge) badge.textContent = numeroCampanaActual;
+
       // Recargar vista
       renderView('reportes');
+
+      // Mostrar toast de éxito con rutas de archivos
+      const nCamp = resultado.numeroCampana || numeroCampanaActual - 1;
+      const archivosMsg = `✅ Campaña N° ${nCamp} cerrada!\n\n` +
+        `📁 Carpeta: ${resultado.carpetaPath}\n\n` +
+        `📄 Deudas: campana_${nCamp}_deudas.xlsx\n` +
+        `📄 Transacciones: campana_${nCamp}_transacciones.xlsx\n\n` +
+        `📊 Resumen:\n` +
+        `   Personal: ${resultado.resumen?.personal || 0}\n` +
+        `   Ventas: S/ ${resultado.resumen?.ventas?.toFixed(2) || '0.00'}\n` +
+        `   Comidas: S/ ${resultado.resumen?.comidas?.toFixed(2) || '0.00'}\n` +
+        `   Deuda Total: S/ ${resultado.resumen?.deuda?.toFixed(2) || '0.00'}`;
       
-      alert('✅ CAMPANA CERRADA EXITOSAMENTE\n\n' +
-        '📁 Archivos guardados:\n' +
-        '- ' + resultado.jsonPath + '\n' +
-        '- ' + resultado.excelPath + '\n\n' +
-        'Las secciones de Comida, Ventas y Deudas han sido reseteadas.\n' +
-        'El personal y productos se mantienen.');
+      showToast(archivosMsg, 'success');
+      console.log('=== CIERRE DE CAMPAÑA COMPLETADO ===');
     } else {
-      alert('❌ Error al cerrar campaña: ' + resultado.error);
+      const errorMsg = resultado && resultado.error ? resultado.error : 'Error desconocido';
+      console.error('Cierre fallido:', errorMsg);
+      showToast('❌ Error al cerrar campaña: ' + errorMsg, 'error');
     }
   } catch (err) {
-    alert('❌ Error: ' + err.message);
+    console.error('Error en catch:', err);
+    showToast('❌ Error: ' + (err && err.message ? err.message : 'Error desconocido'), 'error');
   } finally {
     // Restaurar botón
     const confirmBtn = document.querySelector('button[onclick="mostrarConfirmacionCierreCampana()"]');
@@ -1870,34 +2401,67 @@ function getDetalleDeuda(codigo) {
 
 // ================== MODALES ==================
 window.showModal = function(id, noReset = false) {
-  document.getElementById('modal-' + id).classList.add('active');
+  const modal = document.getElementById('modal-' + id);
+  if (!modal) {
+    console.error('Modal no encontrado: modal-' + id);
+    return;
+  }
+  
+  // Forzar reflow para asegurar que el modal se renderice correctamente
+  modal.offsetHeight;
+  modal.classList.add('active');
+  
   if (!noReset) {
     if (id === 'producto') {
-      document.getElementById('producto-sku').value = '';
-      document.getElementById('producto-nombre').value = '';
-      document.getElementById('producto-categoria').value = 'Bebida';
-      document.getElementById('producto-stock').value = 0;
-      document.getElementById('producto-precio-compra').value = 0;
-      document.getElementById('producto-precio-venta').value = 0;
-      document.getElementById('modal-titulo-producto').textContent = 'Nuevo Producto';
-      // Enfocar el campo nombre después de un pequeño retraso
-      setTimeout(() => document.getElementById('producto-nombre')?.focus(), 100);
+      const elSku = document.getElementById('producto-sku');
+      const elNombre = document.getElementById('producto-nombre');
+      const elCategoria = document.getElementById('producto-categoria');
+      const elStock = document.getElementById('producto-stock');
+      const elPrecioCompra = document.getElementById('producto-precio-compra');
+      const elPrecioVenta = document.getElementById('producto-precio-venta');
+      const elTitulo = document.getElementById('modal-titulo-producto');
+      
+      if (elSku) elSku.value = '';
+      if (elNombre) elNombre.value = '';
+      if (elCategoria) elCategoria.value = 'Bebida';
+      if (elStock) elStock.value = 0;
+      if (elPrecioCompra) elPrecioCompra.value = 0;
+      if (elPrecioVenta) elPrecioVenta.value = 0;
+      if (elTitulo) elTitulo.textContent = 'Nuevo Producto';
+      setTimeout(() => { const n = document.getElementById('producto-nombre'); if (n) { n.disabled = false; n.focus(); } }, 150);
     }
     if (id === 'personal') {
-      document.getElementById('personal-codigo-original').value = '';
-      document.getElementById('personal-codigo').value = generarCodigoPersonal();
-      document.getElementById('personal-nombres').value = '';
-      document.getElementById('personal-dni').value = '';
-      document.getElementById('personal-area').value = '';
-      document.getElementById('modal-titulo-personal').textContent = 'Nuevo Personal';
-      setTimeout(() => document.getElementById('personal-nombres')?.focus(), 100);
+      const elCodOrig = document.getElementById('personal-codigo-original');
+      const elCodigo = document.getElementById('personal-codigo');
+      const elNombres = document.getElementById('personal-nombres');
+      const elDni = document.getElementById('personal-dni');
+      const elArea = document.getElementById('personal-area');
+      const elTitulo = document.getElementById('modal-titulo-personal');
+      
+      if (elCodOrig) elCodOrig.value = '';
+      if (elCodigo) { elCodigo.readOnly = true; elCodigo.value = generarCodigoPersonal(); }
+      if (elNombres) elNombres.value = '';
+      if (elDni) elDni.value = '';
+      if (elArea) elArea.value = '';
+      if (elTitulo) elTitulo.textContent = 'Nuevo Personal';
+      setTimeout(() => { const n = document.getElementById('personal-nombres'); if (n) { n.disabled = false; n.focus(); } }, 150);
     }
   } else {
-    // Cuando se-edita, también enfocar
-    setTimeout(() => document.getElementById('producto-nombre')?.focus(), 100);
+    setTimeout(() => { const n = document.getElementById('producto-nombre'); if (n) n.focus(); }, 150);
+  }
+};
+
+window.openModal = function(id) {
+  const modal = document.getElementById('modal-' + id);
+  if (modal) {
+    modal.classList.add('active');
   }
 };
 
 window.closeModal = function(id) {
-  document.getElementById('modal-' + id).classList.remove('active');
+  const modal = document.getElementById('modal-' + id);
+  if (modal) {
+    modal.classList.remove('active');
+  }
 };
+

@@ -54,6 +54,16 @@ body {
   opacity: 0.8;
 }
 
+.campana-badge {
+  font-size: 0.8rem;
+  color: #ffc107;
+  margin-top: 8px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  display: inline-block;
+}
+
 .menu ul {
   list-style: none;
 }
@@ -287,7 +297,8 @@ table tr:hover {
 #modal-producto input[type="number"],
 #modal-producto select,
 #modal-personal input[type="text"],
-#modal-pago input[type="number"] {
+#modal-pago input[type="number"],
+#modal-campana input[type="number"] {
   pointer-events: auto !important;
   position: relative !important;
   z-index: 10000 !important;
@@ -528,4 +539,62 @@ table tr:hover {
 
 .icono-expandir.expanded {
   transform: rotate(90deg);
+}
+
+/* Resultados de búsqueda en COMIDA */
+#comida-resultados {
+  margin-top: 5px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  background: white;
+  overflow: hidden;
+}
+
+.resultado-item {
+  padding: 10px 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+  transition: background 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.resultado-item:last-child {
+  border-bottom: none;
+}
+
+.resultado-item:hover {
+  background: #ebf8ff;
+}
+
+.resultado-item.selected {
+  background: #e8f5e9;
+  font-weight: 600;
+}
+
+.resultado-item strong {
+  color: var(--primary);
+  min-width: 40px;
+}
+
+.resultado-nombre {
+  flex: 1;
+  color: var(--text);
+}
+
+.resultado-area {
+  font-size: 0.8rem;
+  color: #718096;
+  background: #f0f0f0;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.dropdown-empty {
+  padding: 15px;
+  text-align: center;
+  color: #999;
+  font-style: italic;
 }
