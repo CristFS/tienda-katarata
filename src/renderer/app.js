@@ -1839,7 +1839,7 @@ window.quitarProductoVenta = function(index) {
 };
 
 window.confirmarVenta = async function() {
-  if (!personalVentaSeleccionado || productosVentaSeleccionados.length === 0) { alert('Seleccione un trabajador y al menos un producto'); return; }
+  if (!personalVentaSeleccionado || productosVentaSeleccionados.length === 0) { showToast('❌ Seleccione un trabajador y al menos un producto', 'error'); return; }
   const trab = personal.find(p => p.codigo === personalVentaSeleccionado);
   let total = 0;
   const items = productosVentaSeleccionados.map(p => {
@@ -1854,7 +1854,10 @@ window.confirmarVenta = async function() {
   productosVentaSeleccionados = [];
   personalVentaSeleccionado = null;
   renderView('ventas');
-  alert('Venta registrada');
+  showToast('✅ Venta registrada', 'success');
+  // Enfocar la barra de búsqueda para la siguiente venta
+  const inputBusqueda = document.getElementById('busqueda-personal-venta');
+  if (inputBusqueda) setTimeout(() => inputBusqueda.focus(), 100);
 };
 
 // ================== DEUDAS ==================
