@@ -1,75 +1,46 @@
-﻿const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const Store = require('electron-store');
+const XLSX = require('xlsx');
 
-// Verificar electron-store
-let Store = null;
-try {
-  Store = require('electron-store');
-} catch (e) {
-  console.error('Error cargando electron-store:', e);
-}
-
-// Verificar xlsx
-let XLSX = null;
-try {
-  XLSX = require('xlsx');
-} catch (e) {
-  console.error('Error cargando xlsx:', e);
-}
-
-console.log('electron-store:', Store ? 'OK' : 'FALLO');
-console.log('xlsx:', XLSX ? 'OK' : 'FALLO');
-
-// Rutas portables usando app.getPath - carpeta Documents visible
+// Rutas portables usando app.getPath
 function getAppPaths() {
-  try {
-    const documentsPath = app.getPath('documents');
-    return {
-      logFile: path.join(documentsPath, 'Tienda Katarata', 'logs', 'debug.log'),
-      historialPath: path.join(documentsPath, 'Tienda Katarata', 'Historial'),
-      exportPath: path.join(documentsPath, 'Tienda Katarata', 'Exportaciones')
-    };
-  } catch (e) {
-    console.error('Error getAppPaths:', e);
-    return null;
-  }
+  const userDataPath = app.getPath('userData');
+  return {
+    logFile: path.join(userDataPath, 'debug.log'),
+    historialPath: path.join(userDataPath, 'historial_campanas'),
+    exportPath: path.join(userDataPath, 'Documentos exportados')
+  };
 }
 
 // Log to file
 function log(msg) {
   try {
     const paths = getAppPaths();
-    if (paths && paths.logFile) {
-      const time = new Date().toISOString();
-      fs.appendFileSync(paths.logFile, time + ' ' + msg + '\n');
-    }
+    const time = new Date().toISOString();
+    fs.appendFileSync(paths.logFile, time + ' ' + msg + '\n');
     console.log(msg);
   } catch (e) {
-    console.log(msg);
+    console.log(msg); // Fallback si no se puede escribir
   }
 }
 
 // Store simple - inicializar con manejo de errores
 let store = null;
 try {
-  if (Store) {
-    store = new Store({
-      name: 'tienda-katarata',
-      defaults: {
-        personal: [],
-        productos: [],
-        ventas: [],
-        pagos: [],
-        fechaInicioCampana: new Date().toISOString().split('T')[0],
-        consumosComida: [],
-        numeroCampana: 1
-      }
-    });
-    log('Store inicializado en: ' + store.path);
-  } else {
-    log('Store no disponible - electron-store no cargó');
-  }
+  store = new Store({
+    name: 'tienda-katarata',
+    defaults: {
+      personal: [],
+      productos: [],
+      ventas: [],
+      pagos: [],
+      fechaInicioCampana: '2026-05-11',
+      consumosComida: []
+    }
+  });
+  log('Store inicializado en: ' + store.path);
 } catch(e) {
   console.error('Error store:', e);
   log('Error store: ' + e.message);
@@ -161,30 +132,6 @@ function validateArray(data, fallback = []) {
   return fallback;
 }
 
-// Wrapper seguro para json_to_sheet
-function safeJsonToSheet(data) {
-  try {
-    if (!data || !Array.isArray(data) || data.length === 0) {
-      return XLSX.utils.json_to_sheet([{ 'SIN DATOS': '' }]);
-    }
-    return XLSX.utils.json_to_sheet(data);
-  } catch (e) {
-    console.error('Error json_to_sheet:', e);
-    return XLSX.utils.json_to_sheet([{ 'ERROR': e.message }]);
-  }
-}
-
-// Wrapper seguro para sheet_to_csv
-function safeSheetToCSV(ws) {
-  try {
-    const csv = XLSX.utils.sheet_to_csv(ws);
-    return csv || '';
-  } catch (e) {
-    console.error('Error sheet_to_csv:', e);
-    return '';
-  }
-}
-
 // === DATA STORE ===
 
 // Productos
@@ -219,7 +166,7 @@ ipcMain.handle('save-personal', (event, personal) => {
 });
 
 // Campaña - Fecha de inicio
-ipcMain.handle('get-fecha-inicio-campana', () => store ? store.get('fechaInicioCampana', new Date().toISOString().split('T')[0]) : new Date().toISOString().split('T')[0]);
+ipcMain.handle('get-fecha-inicio-campana', () => store ? store.get('fechaInicioCampana', '2026-05-11') : '2026-05-11');
 ipcMain.handle('save-fecha-inicio-campana', (event, fecha) => store && store.set('fechaInicioCampana', fecha));
 
 // Consumos de Comida
@@ -433,221 +380,231 @@ ipcMain.handle('export-excel', async (event, data, filename) => {
 });
 
 // Cierre de campaña - exportar y resetear (ASYNC)
-// Cierre de campaña - exportar 2 Excel y resetear
-ipcMain.handle('get-numero-campana', () => {
-  if (!store) return 1;
-  return store.get('numeroCampana', 1);
-});
-
-ipcMain.handle('set-numero-campana', (event, n) => {
-  if (store) store.set('numeroCampana', n);
-});
-
 ipcMain.handle('cerrar-campana', async (event, data) => {
-  console.log('=== INICIO CIERRE CAMPAÑA ===');
-  
   try {
-    // 1. VALIDAR store
-    if (!store) {
-      return { success: false, error: 'Store no disponible' };
-    }
-    
-    // 2. VALIDAR XLSX
-    if (!XLSX) {
-      return { success: false, error: 'XLSX no disponible' };
-    }
-    
-    // 3. CREAR carpeta
-    const paths = getAppPaths();
-    if (!paths || !paths.exportPath) {
-      return { success: false, error: 'Ruta de exportación no disponible' };
-    }
-    
+    const paths = getPaths();
     const exportPath = paths.exportPath;
-    if (!fs.existsSync(exportPath)) {
-      fs.mkdirSync(exportPath, { recursive: true });
-    }
+    const historialPath = paths.historialPath;
     
-    const numCampana = data.numeroCampana || 1;
+    // Crear carpetas si no existen
+    if (!fs.existsSync(exportPath)) fs.mkdirSync(exportPath, { recursive: true });
+    if (!fs.existsSync(historialPath)) fs.mkdirSync(historialPath, { recursive: true });
+    
+    // Generar nombre de archivo con timestamp
     const now = new Date();
-    const fecha = now.toISOString().slice(0, 10);
-    const carpetaPath = path.join(exportPath, `Campana_${numCampana}`);
-    fs.mkdirSync(carpetaPath, { recursive: true });
-    console.log('Carpeta creada:', carpetaPath);
+    const fecha = now.toISOString().split('T')[0];
+    const tiempo = String(now.getHours()).padStart(2, '0') + '-' + 
+                 String(now.getMinutes()).padStart(2, '0') + '-' + 
+                 String(now.getSeconds()).padStart(2, '0');
+    const timestamp = fecha + '_' + tiempo;
     
-    // 4. OBTENER datos
+    // Validar datos de entrada
     const ventas = validateArray(data.ventas);
+    const pagos = validateArray(data.pagos);
     const consumosComida = validateArray(data.consumosComida);
     const personal = validateArray(data.personal);
     const productos = validateArray(data.productos);
+    
+    // === 1. Generar JSON ===
+    const totalVentas = ventas.reduce((sum, v) => sum + (v.total || 0), 0);
+    const totalPagos = pagos.reduce((sum, p) => sum + (p.monto || 0), 0);
+    const totalDeuda = totalVentas - totalPagos;
+    const totalComida = consumosComida.reduce((sum, c) => {
+      if (c && c.dias) {
+        return sum + c.dias.filter(d => d && (d.desayuno || d.almuerzo || d.cena)).length;
+      }
+      return sum;
+    }, 0);
     const precioComida = data.precioComida || 10;
+    const costoComida = totalComida * precioComida;
     
-    console.log('Datos: ventas=' + ventas.length + ', comidas=' + consumosComida.length);
+    const jsonData = {
+      fechaCierre: fecha,
+      horaCierre: tiempo,
+      resumen: {
+        totalPersonal: personal.length,
+        totalVentas: totalVentas,
+        totalPagos: totalPagos,
+        totalDeuda: totalDeuda,
+        totalComidas: totalComida,
+        costoComidaTotal: costoComida
+      },
+      personal: personal,
+      ventas: ventas,
+      pagos: pagos,
+      consumosComida: consumosComida,
+      productos: productos
+    };
     
-    // === EXCEL 1: DEUDAS (CODIGO, NOMBRE, DEUDA) ===
-    console.log('Generando Excel de deudas...');
+    const jsonPath = path.join(historialPath, `campana_${timestamp}.json`);
+    fs.writeFileSync(jsonPath, JSON.stringify(jsonData, null, 2), 'utf8');
+    console.log('JSON guardado:', jsonPath);
     
-    const deudasRows = personal.map(p => {
+    // === 2. Generar Excel ===
+    const wb = XLSX.utils.book_new();
+    
+    // Hoja 1: Resumen general
+    const resumenGeneral = [{
+      'FECHA CIERRE': fecha,
+      'TOTAL PERSONAL': personal.length,
+      'TOTAL VENTAS': totalVentas,
+      'TOTAL PAGOS': totalPagos,
+      'DEUDA PENDIENTE': totalDeuda,
+      'TOTAL COMIDAS': totalComida,
+      'COSTO COMIDA': costoComida
+    }];
+    const wsResumen = XLSX.utils.json_to_sheet(resumenGeneral);
+    XLSX.utils.book_append_sheet(wb, wsResumen, 'Resumen');
+    
+    // Hoja 2: Resumen por colaborador
+    const resumenCols = personal.map(p => {
       if (!p) return null;
+      const misVentas = ventas.filter(v => v && v.clienteCodigo === p.codigo);
+      const misPagos = pagos.filter(pa => pa && pa.clienteCodigo === p.codigo);
+      const misComida = consumosComida.find(c => c && c.codigo === p.codigo);
+      const totalPersonalVentas = misVentas.reduce((sum, v) => sum + (v.total || 0), 0);
+      const totalPersonalPagos = misPagos.reduce((sum, pa) => sum + (pa.monto || 0), 0);
       
-      // Calcular ventas del cliente
-      let totalVentas = 0;
-      ventas.forEach(v => {
-        if (v && v.clienteCodigo === p.codigo) {
-          totalVentas += v.total || 0;
-        }
-      });
-      
-      // Calcular comidas del cliente
-      let totalComida = 0;
-      const misComidas = consumosComida.find(c => c && c.codigo === p.codigo);
-      if (misComidas && misComidas.dias) {
-        misComidas.dias.forEach(dia => {
-          if (dia) {
-            if (dia.desayuno) totalComida += precioComida;
-            if (dia.almuerzo) totalComida += precioComida;
-            if (dia.cena) totalComida += precioComida;
+      let desayunos = 0, almuerzos = 0, cenas = 0;
+      if (misComida && misComida.dias) {
+        misComida.dias.forEach(d => {
+          if (d) {
+            if (d.desayuno) desayunos++;
+            if (d.almuerzo) almuerzos++;
+            if (d.cena) cenas++;
           }
         });
       }
-      
-      const deuda = totalVentas + totalComida;
+      const totalComidasPersona = desayunos + almuerzos + cenas;
+      const costoComidaPersona = totalComidasPersona * precioComida;
       
       return {
         'CODIGO': p.codigo || '',
         'NOMBRE': p.apellidosNombres || p.nombre || '',
-        'DEUDA': deuda
+        'AREA': p.areaTrabajo || p.area || '',
+        'DNI': p.dni || '',
+        'DESAYUNOS': desayunos,
+        'ALMUERZOS': almuerzos,
+        'CENAS': cenas,
+        'TOTAL COMIDAS': totalComidasPersona,
+        'COSTO COMIDA': costoComidaPersona,
+        'TOTAL COMPRAS': totalPersonalVentas,
+        'TOTAL PAGOS': totalPersonalPagos,
+        'DEUDA': Math.max(0, totalPersonalVentas - totalPersonalPagos)
       };
     }).filter(r => r);
+    const wsColaboradores = XLSX.utils.json_to_sheet(resumenCols);
+    XLSX.utils.book_append_sheet(wb, wsColaboradores, 'Colaboradores');
     
-    // Crear workbook para deudas
-    const wbDeudas = XLSX.utils.book_new();
-    const wsDeudas = XLSX.utils.json_to_sheet(deudasRows);
-    XLSX.utils.book_append_sheet(wbDeudas, wsDeudas, 'Deudas');
-    
-    const deudasPath = path.join(carpetaPath, `campana_${numCampana}_deudas.xlsx`);
-    XLSX.writeFile(wbDeudas, deudasPath);
-    console.log('Excel deudas guardado:', deudasPath);
-    
-    // === EXCEL 2: TRANSACCIONES (VENTAS + COMIDAS) ===
-    console.log('Generando Excel de transacciones...');
-    
-    const transRows = [];
-    
-    // 2a. VENTAS
+    // Hoja 3: Detalle de ventas
+    const ventasData = [];
     ventas.forEach(v => {
-      if (!v) return;
-      if (v.items && v.items.length > 0) {
-        const detalles = v.items
-          .filter(item => item)
-          .map(item => {
-            const prod = productos.find(p => p && p.sku === item.sku);
-            const nombre = prod ? (prod.nombre || '') : '';
-            return (nombre || 'Producto') + ' x' + (item.cantidad || 0);
-          });
-        transRows.push({
-          FECHA: v.fecha || '',
-          TIPO: 'VENTA',
-          CODIGO: v.clienteCodigo || '',
-          NOMBRE: v.clienteNombre || '',
-          DETALLE: detalles.join(', '),
-          MONTO: v.total || 0
-        });
-      } else {
-        transRows.push({
-          FECHA: v.fecha || '',
-          TIPO: 'VENTA',
-          CODIGO: v.clienteCodigo || '',
-          NOMBRE: v.clienteNombre || '',
-          DETALLE: 'Venta',
-          MONTO: v.total || 0
+      if (v && v.items && v.items.length > 0) {
+        v.items.forEach(item => {
+          if (item) {
+            ventasData.push({
+              'FECHA': v.fecha || '',
+              'CODIGO': v.clienteCodigo || '',
+              'NOMBRE': v.clienteNombre || '',
+              'PRODUCTO': item.sku || '',
+              'CANTIDAD': item.cantidad || 0,
+              'PRECIO': item.precioVenta || 0,
+              'SUBTOTAL': (item.cantidad || 0) * (item.precioVenta || 0)
+            });
+          }
         });
       }
     });
+    const wsVentas = XLSX.utils.json_to_sheet(ventasData);
+    XLSX.utils.book_append_sheet(wb, wsVentas, 'Ventas');
     
-    // 2b. COMIDAS
-    const fechaInicioCampana = data.fechaInicioCampana || store.get('fechaInicioCampana', '');
+    // Hoja 4: Pagos
+    const pagosData = pagos.map(p => {
+      if (!p) return null;
+      const trab = personal.find(pe => pe && pe.codigo === p.clienteCodigo);
+      return {
+        'FECHA': p.fecha || '',
+        'CODIGO': p.clienteCodigo || '',
+        'NOMBRE': trab ? (trab.apellidosNombres || trab.nombre) : 'N/A',
+        'MONTO': p.monto || 0
+      };
+    }).filter(p => p);
+    const wsPagos = XLSX.utils.json_to_sheet(pagosData);
+    XLSX.utils.book_append_sheet(wb, wsPagos, 'Pagos');
+    
+    // Hoja 5: Comida detallada
+    const comidaData = [];
     consumosComida.forEach(c => {
       if (!c || !c.dias) return;
       const trab = personal.find(p => p && p.codigo === c.codigo);
+      const nombre = trab ? (trab.apellidosNombres || trab.nombre) : 'N/A';
+      const area = trab ? (trab.areaTrabajo || trab.area) : '';
+      
       c.dias.forEach(dia => {
         if (!dia) return;
-        // Calcular fecha real del día
-        let fechaDia = '';
-        if (fechaInicioCampana && dia.dia) {
-          const d = new Date(fechaInicioCampana + 'T12:00:00');
-          d.setDate(d.getDate() + (dia.dia - 1));
-          fechaDia = d.toISOString().split('T')[0];
+        if (dia.desayuno) {
+          comidaData.push({
+            'CODIGO': c.codigo || '',
+            'NOMBRE': nombre,
+            'AREA': area,
+            'DIA': dia.dia || 0,
+            'TIPO': 'Desayuno',
+            'MONTO': precioComida
+          });
         }
-        const comidas = [];
-        if (dia.desayuno) comidas.push('Desayuno');
-        if (dia.almuerzo) comidas.push('Almuerzo');
-        if (dia.cena) comidas.push('Cena');
-        if (comidas.length > 0) {
-          transRows.push({
-            FECHA: fechaDia,
-            TIPO: 'COMIDA',
-            CODIGO: c.codigo || '',
-            NOMBRE: trab ? (trab.apellidosNombres || trab.nombre) : '',
-            DETALLE: comidas.join('+'),
-            MONTO: precioComida * comidas.length
+        if (dia.almuerzo) {
+          comidaData.push({
+            'CODIGO': c.codigo || '',
+            'NOMBRE': nombre,
+            'AREA': area,
+            'DIA': dia.dia || 0,
+            'TIPO': 'Almuerzo',
+            'MONTO': precioComida
+          });
+        }
+        if (dia.cena) {
+          comidaData.push({
+            'CODIGO': c.codigo || '',
+            'NOMBRE': nombre,
+            'AREA': area,
+            'DIA': dia.dia || 0,
+            'TIPO': 'Cena',
+            'MONTO': precioComida
           });
         }
       });
     });
+    const wsComida = XLSX.utils.json_to_sheet(comidaData);
+    XLSX.utils.book_append_sheet(wb, wsComida, 'Comida');
     
-    // Ordenar por codigo y fecha
-    transRows.sort((a, b) => {
-      const codeA = a.CODIGO || '';
-      const codeB = b.CODIGO || '';
-      if (codeA !== codeB) return codeA.localeCompare(codeB);
-      return (a.FECHA || '').localeCompare(b.FECHA || '');
+    const excelPath = path.join(historialPath, `reporte_campana_${timestamp}.xlsx`);
+    
+    // Escribir Excel de forma asíncrona
+    await new Promise((resolve, reject) => {
+      XLSX.writeFile(wb, excelPath, (err) => {
+        if (err) reject(err);
+        else resolve();
+      });
     });
+    console.log('Excel guardado:', excelPath);
     
-    // Crear workbook para transacciones
-    const wbTrans = XLSX.utils.book_new();
-    const wsTrans = XLSX.utils.json_to_sheet(transRows);
-    XLSX.utils.book_append_sheet(wbTrans, wsTrans, 'Transacciones');
-    
-    const transPath = path.join(carpetaPath, `campana_${numCampana}_transacciones.xlsx`);
-    XLSX.writeFile(wbTrans, transPath);
-    console.log('Excel transacciones guardado:', transPath);
-    
-    // 5. CALCULAR resumen
-    let totalVentas = 0, totalComidas = 0;
-    transRows.forEach(r => {
-      if (r.TIPO === 'VENTA') totalVentas += r.MONTO;
-      else if (r.TIPO === 'COMIDA') totalComidas += r.MONTO;
-    });
-    const deudaTotal = totalVentas + totalComidas;
-    
-    console.log('Resumen: ventas=' + totalVentas + ', comidas=' + totalComidas + ', deuda=' + deudaTotal);
-    
-    // 6. RESETEAR store
+    // === 3. Resetear datos en store ===
     store.set('ventas', []);
     store.set('pagos', []);
     store.set('consumosComida', []);
-    store.set('numeroCampana', numCampana + 1);
-    console.log('Store reseteado');
+    store.set('fechaInicioCampana', fecha);
     
-    // 7. RETORNAR resultado
-    console.log('=== CIERRE COMPLETADO ===');
+    console.log('=== CIERRE DE CAMPAÑA COMPLETADO ===');
+    
     return {
       success: true,
-      carpetaPath: carpetaPath,
-      archivoDeudas: deudasPath,
-      archivoTrans: transPath,
-      numeroCampana: numCampana,
-      resumen: {
-        personal: personal.length,
-        ventas: totalVentas,
-        comidas: totalComidas,
-        deuda: deudaTotal
-      }
+      jsonPath: jsonPath,
+      excelPath: excelPath,
+      mensaje: 'Campaña cerrada correctamente'
     };
     
   } catch (err) {
-    console.error('Error cierre:', err);
-    return { success: false, error: String(err && err.message ? err.message : 'Error desconocido') };
+    console.error('Error cierre campaña:', err);
+    return { success: false, error: err.message };
   }
 });
