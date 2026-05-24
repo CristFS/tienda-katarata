@@ -3,6 +3,12 @@ node_modules/
 
 # Build output
 dist/
+dist-installer/
+win-unpacked/
+*.exe.blockmap
+latest.yml
+builder-debug.yml
+builder-effective-config.yaml
 
 # IDE
 .vscode/

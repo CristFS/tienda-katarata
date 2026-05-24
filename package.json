@@ -5,12 +5,38 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-packager . \"Tienda Katarata\" --platform=win32 --arch=x64 --out=dist --overwrite"
+    "build": "electron-packager . \"Tienda Katarata\" --platform=win32 --arch=x64 --out=dist --overwrite",
+    "pack": "electron-builder --win"
+  },
+  "build": {
+    "appId": "com.katarata.tienda",
+    "productName": "Tienda Katarata",
+    "directories": {
+      "output": "dist-installer"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Tienda Katarata",
+      "uninstallDisplayName": "Tienda Katarata",
+      "installerLanguages": ["es_ES", "en_US"]
+    }
   },
   "author": "Katarata",
   "license": "MIT",
   "devDependencies": {
     "electron": "^33.0.0",
+    "electron-builder": "^25.1.8",
     "electron-packager": "^17.1.2"
   },
   "dependencies": {
