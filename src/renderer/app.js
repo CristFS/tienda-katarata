@@ -1627,26 +1627,17 @@ let personalVentaSeleccionado = null;
 let productosVentaSeleccionados = [];
 
 function renderVentas(content) {
-  let opcionesPersonal = '';
-  if (personal && personal.length > 0) {
-    opcionesPersonal = '<option value="">-- Seleccionar trabajador --</option>';
-    for (let i = 0; i < personal.length; i++) {
-      const p = personal[i];
-      const info = getPersonalInfo(p);
-      opcionesPersonal += '<option value="' + sanitizeHTML(p.codigo) + '">' + sanitizeHTML(p.codigo) + ' - ' + sanitizeHTML(info.nombre) + ' - ' + sanitizeHTML(info.area) + '</option>';
-    }
-  } else {
-    opcionesPersonal = '<option value="">No hay personal cargado</option>';
-  }
-  
   content.innerHTML = `
     <div class="card">
       <h3>🛒 Nueva Venta (Fiado)</h3>
-      <div class="form-group">
+      <div class="form-group" style="position:relative">
         <label>Seleccionar Trabajador</label>
-        <select id="select-personal-venta" onchange="seleccionarPersonalVenta(this.value)" style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px; font-size:1rem">
-          ${opcionesPersonal}
-        </select>
+        <input type="text" id="busqueda-personal-venta"
+          placeholder="🔍 Escriba código o nombre para buscar..."
+          autocomplete="off"
+          oninput="buscarPersonalVenta(this.value)"
+          style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px; font-size:1rem">
+        <div id="resultados-busqueda-venta" style="display:none; position:absolute; top:100%; left:0; right:0; z-index:1000; background:white; border:1px solid #ddd; border-radius:0 0 6px 6px; max-height:300px; overflow-y:auto; box-shadow:0 4px 12px rgba(0,0,0,0.15)"></div>
       </div>
       <div id="trabajador-seleccionado" style="display:none; background:#e8f5e9; padding:15px; border-radius:8px; margin:15px 0">
         <p><strong>Trabajador:</strong> <span id="trabajador-nombre"></span></p>
@@ -1680,6 +1671,62 @@ function renderVentas(content) {
     </div>
   `;
 }
+
+// Búsqueda de personal en Ventas
+window.buscarPersonalVenta = function(texto) {
+  const container = document.getElementById('resultados-busqueda-venta');
+  if (!container) return;
+  
+  const termino = texto.trim().toLowerCase();
+  
+  if (!termino) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+    return;
+  }
+  
+  const resultados = personal.filter(p => {
+    if (!p) return false;
+    const codigo = (p.codigo || '').toLowerCase();
+    const nombre = (p.apellidosNombres || p.nombre || '').toLowerCase();
+    return codigo.includes(termino) || nombre.includes(termino);
+  });
+  
+  if (resultados.length === 0) {
+    container.innerHTML = '<div class="dropdown-empty">No se encontraron trabajadores</div>';
+    container.style.display = 'block';
+    return;
+  }
+  
+  let html = '';
+  resultados.forEach(p => {
+    const nombre = p.apellidosNombres || p.nombre || '-';
+    const area = p.areaTrabajo || p.area || '-';
+    html += '<div class="resultado-item" onclick="seleccionarResultadoVenta(\'' + p.codigo.replace(/'/g, "\\'") + '\')">';
+    html += '<strong>' + sanitizeHTML(p.codigo) + '</strong>';
+    html += '<span class="resultado-nombre">' + sanitizeHTML(nombre) + '</span>';
+    html += '<span class="resultado-area">' + sanitizeHTML(area) + '</span>';
+    html += '</div>';
+  });
+  
+  container.innerHTML = html;
+  container.style.display = 'block';
+};
+
+window.seleccionarResultadoVenta = function(codigo) {
+  const input = document.getElementById('busqueda-personal-venta');
+  const container = document.getElementById('resultados-busqueda-venta');
+  if (container) {
+    container.style.display = 'none';
+    container.innerHTML = '';
+  }
+  const trab = personal.find(p => p.codigo === codigo);
+  if (input && trab) {
+    const nombre = trab.apellidosNombres || trab.nombre || '';
+    input.value = codigo + ' - ' + nombre;
+  }
+  seleccionarPersonalVenta(codigo);
+};
 
 window.seleccionarPersonalVenta = function(codigo) {
   if (!codigo) {
