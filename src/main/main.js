@@ -315,6 +315,8 @@ ipcMain.handle('import-excel-personal', async (event, data) => {
       return { success: false, error: 'El Excel está vacío' };
     }
     
+    const codigosGenerados = new Set(); // Rastrear códigos generados en este batch para evitar colisiones
+    
     const personal = json.map((row, index) => {
       if (!row) return null;
       
@@ -361,7 +363,22 @@ ipcMain.handle('import-excel-personal', async (event, data) => {
         return null;
       }
       
-      if (!codigo) codigo = String(index + 1);
+      if (!codigo) {
+        const prefijo = (nombre || '').trim().substring(0, 3).toUpperCase();
+        const sufijo = (dni || '').replace(/\D/g, '').substring(0, 3);
+        if (prefijo) {
+          let base = prefijo + (sufijo || '000');
+          codigo = base;
+          let contador = 1;
+          while (codigosGenerados.has(codigo)) {
+            contador++;
+            codigo = base + '-' + contador;
+          }
+        } else {
+          codigo = String(index + 1);
+        }
+      }
+      codigosGenerados.add(codigo);
       if (!area) area = 'SIN ÁREA';
       
       return {

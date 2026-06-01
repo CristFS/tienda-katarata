@@ -686,13 +686,20 @@ window.editarPersonal = function(codigo) {
   showModal('personal', true);
 };
 
-// Generar código correlativo
-function generarCodigoPersonal() {
-  if (personal.length === 0) return '1';
-  const codigos = personal.map(p => parseInt(p.codigo)).filter(c => !isNaN(c));
-  if (codigos.length === 0) return '1';
-  const maxCodigo = Math.max(...codigos);
-  return String(maxCodigo + 1);
+// Generar código: 3 primeras letras de nombres + 3 primeros dígitos del DNI
+function generarCodigoPersonal(nombres, dni, excluirCodigo) {
+  const prefijo = (nombres || '').trim().substring(0, 3).toUpperCase();
+  const sufijo = (dni || '').replace(/\D/g, '').substring(0, 3);
+  if (!prefijo) return null;
+  let codigo = prefijo + (sufijo || '000');
+  // Resolver colisiones: agregar -2, -3, etc. si el código ya existe
+  let contador = 1;
+  const baseCodigo = codigo;
+  while (personal.some(p => p.codigo === codigo && p.codigo !== excluirCodigo)) {
+    contador++;
+    codigo = baseCodigo + '-' + contador;
+  }
+  return codigo;
 }
 
 window.guardarPersonal = async function(e) {
@@ -713,7 +720,7 @@ window.guardarPersonal = async function(e) {
     return;
   }
   
-  let codigoNuevo = codigoOriginal ? codigoOriginal : generarCodigoPersonal();
+  let codigoNuevo = codigoOriginal ? codigoOriginal : (generarCodigoPersonal(nombres, dni, codigoOriginal) || 'PER001');
   
   const persona = {
     codigo: codigoNuevo,
@@ -2489,7 +2496,7 @@ window.showModal = function(id, noReset = false) {
       const elTitulo = document.getElementById('modal-titulo-personal');
       
       if (elCodOrig) elCodOrig.value = '';
-      if (elCodigo) { elCodigo.readOnly = true; elCodigo.value = generarCodigoPersonal(); }
+      if (elCodigo) { elCodigo.readOnly = true; elCodigo.value = 'SE GENERA AL GUARDAR'; }
       if (elNombres) elNombres.value = '';
       if (elDni) elDni.value = '';
       if (elArea) elArea.value = '';
