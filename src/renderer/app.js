@@ -318,7 +318,7 @@ function renderProductos(content) {
         <button class="btn btn-primary" onclick="showModal('producto')">+ Nuevo Producto</button>
       </div>
       <p style="color:#666; margin-bottom:15px; font-size:0.9rem">
-        <strong>Formato SKU:</strong> Letra de categoría + 5 dígitos (ej: S00001, B00002, P00003)<br>
+        <strong>Formato SKU:</strong> Letra de categoría + 2 dígitos (ej: S01, B02, P03)<br>
         <em>S=Snack, B=Bebida, P=Panadería, C=Chocolate, O=Otro</em>
       </p>
       <table>
@@ -356,7 +356,7 @@ function generarSKU(categoria) {
   const prefijo = prefijos[categoria] || 'O';
   const productosCategoria = productos.filter(p => p.categoria === categoria);
   const siguienteNumero = productosCategoria.length + 1;
-  return prefijo + String(siguienteNumero).padStart(5, '0');
+  return prefijo + String(siguienteNumero).padStart(2, '0');
 }
 
 // Editar producto
@@ -1652,15 +1652,12 @@ function renderVentas(content) {
       </div>
       <div id="seccion-productos" style="display:none">
         <h4>Productos</h4>
-        <div class="productos-grid">
-          ${productos.filter(p => p.stock > 0).map(p => `
-            <div class="producto-card" data-sku="${sanitizeHTML(p.sku)}" onclick="seleccionarProductoVenta('${sanitizeHTML(p.sku)}')">
-              <h4>${sanitizeHTML(p.nombre)}</h4>
-              <p>Stock: ${p.stock}</p>
-              <p>S/ ${(p.precioVenta || 0).toFixed(2)}</p>
-            </div>
-          `).join('') || '<p>No hay productos en stock</p>'}
-        </div>
+        <input type="text" id="busqueda-producto-venta"
+          placeholder="🔍 Buscar producto por nombre o SKU..."
+          autocomplete="off"
+          oninput="buscarProductoVenta(this.value)"
+          style="width:100%; padding:10px; border:1px solid #ddd; border-radius:5px; font-size:1rem; margin-bottom:15px; box-sizing:border-box">
+        <div class="productos-grid" id="productos-venta-grid"></div>
         <div id="resumen-venta" style="margin-top:20px; background:#f7fafc; padding:20px; border-radius:8px">
           <p style="color:#666">Ningún producto seleccionado</p>
         </div>
@@ -1752,7 +1749,44 @@ window.seleccionarPersonalVenta = function(codigo) {
   document.getElementById('trabajador-deuda').textContent = calcularDeudaPersonal(codigo).toFixed(2);
   productosVentaSeleccionados = [];
   document.getElementById('seccion-productos').style.display = 'block';
+  // Inicializar grid de productos
+  const buscador = document.getElementById('busqueda-producto-venta');
+  if (buscador) buscador.value = '';
+  buscarProductoVenta('');
   actualizarResumenVenta();
+};
+
+// Buscar productos en ventas por nombre o SKU
+window.buscarProductoVenta = function(texto) {
+  const container = document.getElementById('productos-venta-grid');
+  if (!container) return;
+  
+  const termino = texto.trim().toLowerCase();
+  
+  const filtrados = productos.filter(p => {
+    if (p.stock <= 0) return false;
+    if (!termino) return true;
+    const nombre = (p.nombre || '').toLowerCase();
+    const sku = (p.sku || '').toLowerCase();
+    return nombre.includes(termino) || sku.includes(termino);
+  });
+  
+  if (filtrados.length === 0) {
+    container.innerHTML = '<p style="grid-column:1/-1; color:#999; text-align:center; padding:30px">No se encontraron productos</p>';
+    return;
+  }
+  
+  let html = '';
+  filtrados.forEach(p => {
+    html += `
+      <div class="producto-card" data-sku="${sanitizeHTML(p.sku)}" onclick="seleccionarProductoVenta('${sanitizeHTML(p.sku)}')">
+        <h4>${sanitizeHTML(p.nombre)}</h4>
+        <p>Stock: ${p.stock}</p>
+        <p>S/ ${(p.precioVenta || 0).toFixed(2)}</p>
+      </div>
+    `;
+  });
+  container.innerHTML = html;
 };
 
 window.seleccionarProductoVenta = function(sku) {
